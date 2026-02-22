@@ -1,6 +1,5 @@
 /**
- * AAI Attendance App - Attendance Context
- * Manages attendance state and operations
+ * AAI Attendance App - Attendance Context (API-connected)
  */
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
@@ -8,33 +7,27 @@ import {
   getTodayAttendance as getTodayAttendanceService,
   getAttendanceStatus as getAttendanceStatusService,
   getCurrentLocation as getCurrentLocationService,
-  checkUserGeofence as checkUserGeofenceService,
   markCheckIn as markCheckInService,
   markCheckOut as markCheckOutService,
   getAttendanceHistory as getAttendanceHistoryService,
   getAttendanceStats as getAttendanceStatsService,
-  getMonthlyCalendar as getMonthlyCalendarService,
   syncAttendance as syncAttendanceService,
   getSyncStatus as getSyncStatusService,
 } from '../services/attendanceService';
+import { checkPointInGeofence } from '../services/locationService';
 import { useAuth } from './AuthContext';
 
-// Create context
 const AttendanceContext = createContext();
 
-// Custom hook to use attendance context
 export const useAttendance = () => {
   const context = useContext(AttendanceContext);
-  if (!context) {
-    throw new Error('useAttendance must be used within an AttendanceProvider');
-  }
+  if (!context) throw new Error('useAttendance must be used within an AttendanceProvider');
   return context;
 };
 
-// Attendance Provider component
 export const AttendanceProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
-  
+
   const [todayAttendance, setTodayAttendance] = useState(null);
   const [attendanceStatus, setAttendanceStatus] = useState({
     hasCheckedIn: false,
@@ -60,185 +53,180 @@ export const AttendanceProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
 
-  // Get today's attendance
   const getTodayAttendance = useCallback(async () => {
-    if (!isAuthenticated || !user) return null;
+    if (!isAuthenticated) return null;
     try {
-      const result = await getTodayAttendanceService(user.employeeId);
+      const result = await getTodayAttendanceService();
       setTodayAttendance(result);
       return result;
     } catch (error) {
-      console.error('Get today attendance error:', error);
+      console.error('[AttendanceContext] getTodayAttendance:', error);
       return null;
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated]);
 
-  // Get attendance status
   const getAttendanceStatus = useCallback(async () => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated) return;
     try {
-      const status = await getAttendanceStatusService(user.employeeId);
+      const status = await getAttendanceStatusService();
       setAttendanceStatus(status);
+      return status;
     } catch (error) {
-      console.error('Get attendance status error:', error);
+      console.error('[AttendanceContext] getAttendanceStatus:', error);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated]);
 
-  // Get current location
   const getCurrentLocation = useCallback(async () => {
     setLocationLoading(true);
     try {
-      const result = await getCurrentLocationService();
-      return result;
+      return await getCurrentLocationService();
     } catch (error) {
-      console.error('Get current location error:', error);
+      console.error('[AttendanceContext] getCurrentLocation:', error);
       return { success: false, error: 'Failed to get location' };
     } finally {
       setLocationLoading(false);
     }
   }, []);
 
-  // Check geofence
-  const checkGeofence = useCallback(async (location) => {
-    if (!isAuthenticated || !user) {
-      return { success: false, error: 'Not authenticated' };
-    }
+  const checkGeofence = useCallback(async (userLocation, workplaceLocation) => {
     try {
-      return await checkUserGeofenceService(location, user.location);
+      if (!workplaceLocation) {
+        return { success: false, isInside: false, error: 'No workplace location set' };
+      }
+      const result = checkPointInGeofence(userLocation, workplaceLocation);
+      return { success: true, ...result };
     } catch (error) {
-      console.error('Check geofence error:', error);
+      console.error('[AttendanceContext] checkGeofence:', error);
       return { success: false, error: 'Failed to check geofence' };
     }
-  }, [isAuthenticated, user]);
+  }, []);
 
-  // Mark check-in
-  const markCheckIn = useCallback(async (location, photoUri) => {
-    if (!isAuthenticated || !user) {
-      return { success: false, error: 'Not authenticated' };
-    }
+  const markCheckIn = useCallback(async (location, photoUri, locationId) => {
+    if (!isAuthenticated) return { success: false, error: 'Not authenticated' };
     setLoading(true);
     try {
-      const result = await markCheckInService(user.employeeId, location, photoUri);
+      const result = await markCheckInService(location, photoUri, locationId);
       if (result.success) {
         setTodayAttendance(result.record);
         await getAttendanceStatus();
       }
       return result;
     } catch (error) {
-      console.error('Mark check-in error:', error);
+      console.error('[AttendanceContext] markCheckIn:', error);
       return { success: false, error: 'Failed to mark check-in' };
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, user, getAttendanceStatus]);
+  }, [isAuthenticated, getAttendanceStatus]);
 
-  // Mark check-out
-  const markCheckOut = useCallback(async (location, photoUri) => {
-    if (!isAuthenticated || !user) {
-      return { success: false, error: 'Not authenticated' };
-    }
+  const markCheckOut = useCallback(async (location, photoUri, locationId) => {
+    if (!isAuthenticated) return { success: false, error: 'Not authenticated' };
     setLoading(true);
     try {
-      const result = await markCheckOutService(user.employeeId, location, photoUri);
+      const result = await markCheckOutService(location, photoUri, locationId);
       if (result.success) {
         setTodayAttendance(result.record);
         await getAttendanceStatus();
       }
       return result;
     } catch (error) {
-      console.error('Mark check-out error:', error);
+      console.error('[AttendanceContext] markCheckOut:', error);
       return { success: false, error: 'Failed to mark check-out' };
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, user, getAttendanceStatus]);
+  }, [isAuthenticated, getAttendanceStatus]);
 
-  // Get attendance history
-  const getAttendanceHistory = useCallback(async (monthKey = null) => {
-    if (!isAuthenticated || !user) return [];
+  const getAttendanceHistory = useCallback(async (page = 1, filters = {}) => {
+    if (!isAuthenticated) return [];
     setLoading(true);
     try {
-      const history = await getAttendanceHistoryService(user.employeeId, monthKey);
-      setAttendanceHistory(history);
-      return history;
+      const result = await getAttendanceHistoryService(page, 20, filters);
+      if (result.success) {
+        setAttendanceHistory(result.records || []);
+        return result.records || [];
+      }
+      return [];
     } catch (error) {
-      console.error('Get attendance history error:', error);
+      console.error('[AttendanceContext] getAttendanceHistory:', error);
       return [];
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated]);
 
-  // Get attendance stats
-  const getAttendanceStats = useCallback(async (monthKey = null) => {
-    if (!isAuthenticated || !user) return;
+  const getAttendanceStats = useCallback(async (month, year) => {
+    if (!isAuthenticated) return;
     try {
-      const stats = await getAttendanceStatsService(user.employeeId, monthKey);
-      setAttendanceStats(stats);
+      const now = new Date();
+      const result = await getAttendanceStatsService(
+        month ?? now.getMonth() + 1,
+        year ?? now.getFullYear()
+      );
+      setAttendanceStats(result);
+      return result;
     } catch (error) {
-      console.error('Get attendance stats error:', error);
+      console.error('[AttendanceContext] getAttendanceStats:', error);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated]);
 
-  // Get monthly calendar
+  // Monthly calendar: derive from history
   const getMonthlyCalendar = useCallback(async (year, month) => {
-    if (!isAuthenticated || !user) return {};
+    if (!isAuthenticated) return {};
     try {
-      return await getMonthlyCalendarService(user.employeeId, year, month);
+      const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+      const result = await getAttendanceHistoryService(1, 31, { startDate: `${monthStr}-01`, endDate: `${monthStr}-31` });
+      const calendarMap = {};
+      (result.records || []).forEach(record => {
+        const day = parseInt(record.date?.split('-')[2]);
+        if (day) {
+          calendarMap[day] = {
+            status: record.status,
+            checkIn: record.checkIn?.time,
+            checkOut: record.checkOut?.time,
+            totalHours: record.duration,
+          };
+        }
+      });
+      return calendarMap;
     } catch (error) {
-      console.error('Get monthly calendar error:', error);
+      console.error('[AttendanceContext] getMonthlyCalendar:', error);
       return {};
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated]);
 
-  // Sync attendance
   const syncAttendance = useCallback(async () => {
     setLoading(true);
     try {
       const result = await syncAttendanceService();
-      if (result.success) {
-        await getSyncStatus();
-      }
       return result;
     } catch (error) {
-      console.error('Sync attendance error:', error);
-      return { success: false, error: 'Failed to sync attendance' };
+      return { success: false, error: 'Failed to sync' };
     } finally {
       setLoading(false);
     }
-  }, [getSyncStatus]);
+  }, []);
 
-  // Get sync status
   const getSyncStatus = useCallback(async () => {
     try {
       const status = await getSyncStatusService();
       setSyncStatus(status);
       return status;
     } catch (error) {
-      console.error('Get sync status error:', error);
       return { pendingCount: 0, lastSync: null, hasPending: false };
     }
   }, []);
 
-  // Refresh all attendance data
   const refreshAttendanceData = useCallback(async () => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated) return;
     setLoading(true);
     try {
-      await Promise.all([
-        getAttendanceStatus(),
-        getAttendanceHistory(),
-        getAttendanceStats(),
-        getSyncStatus(),
-      ]);
-    } catch (error) {
-      console.error('Refresh attendance data error:', error);
+      await Promise.all([getAttendanceStatus(), getAttendanceStats()]);
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, user, getAttendanceStatus, getAttendanceHistory, getAttendanceStats, getSyncStatus]);
+  }, [isAuthenticated, getAttendanceStatus, getAttendanceStats]);
 
-  // Context value
   const value = {
     todayAttendance,
     attendanceStatus,

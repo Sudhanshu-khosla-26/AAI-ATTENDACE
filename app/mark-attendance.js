@@ -1,29 +1,34 @@
 /**
  * AAI Attendance App - Mark Attendance Screen
- * Check-in and check-out with location and face capture
+ * Check-in and check-out with GPS verification + face photo capture
+ * Photos are saved locally AND uploaded to backend
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Alert,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Animated,
+} from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
-import * as FileSystem from 'expo-file-system';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
-import Colors from '../constants/colors';
-import { useAuth, useAttendance } from '../context';
-import Header from '../components/Header';
-import Button from '../components/Button';
-import GeofenceMap from '../components/GeofenceMap';
-import CameraView from '../components/CameraView';
-import SuccessAnimation from '../components/SuccessAnimation';
-import Loading from '../components/Loading';
-import Card from '../components/Card';
+import { useAuth } from '../context/AuthContext';
+import { useAttendance } from '../context/AttendanceContext';
+import { getLocationById, checkPointInGeofence, formatDistance } from '../services/locationService';
 import { formatTime } from '../utils/dateUtils';
-import { formatDistance } from '../utils/locationUtils';
-import { getLocationById } from '../services/locationService';
+
+// Import optional components with fallback
+let CameraViewComponent = null;
+try { CameraViewComponent = require('../components/CameraView').default; } catch { }
 
 const STEPS = {
   LOCATION: 'location',
@@ -32,61 +37,94 @@ const STEPS = {
   SUCCESS: 'success',
 };
 
+const COLORS = {
+  primary: '#1C4CA6',
+  primaryLight: '#2563EB',
+  success: '#10B981',
+  error: '#EF4444',
+  warning: '#F59E0B',
+  background: '#F8FAFC',
+  card: '#FFFFFF',
+  text: '#111827',
+  textSecondary: '#6B7280',
+  border: '#E5E7EB',
+};
+
 export default function MarkAttendanceScreen() {
   const router = useRouter();
   const { type } = useLocalSearchParams();
   const { user } = useAuth();
-  const { getCurrentLocation, checkGeofence, markCheckIn, markCheckOut } = useAttendance();
+  const { getCurrentLocation, markCheckIn, markCheckOut } = useAttendance();
+
+  const isCheckIn = type !== 'checkout';
 
   const [currentStep, setCurrentStep] = useState(STEPS.LOCATION);
   const [userLocation, setUserLocation] = useState(null);
   const [workplace, setWorkplace] = useState(null);
   const [isInsideGeofence, setIsInsideGeofence] = useState(false);
-  const [distance, setDistance] = useState(null);
-  const [capturedPhoto, setCapturedPhoto] = useState(null);
+  const [distanceToWorkplace, setDistanceToWorkplace] = useState(null);
   const [loading, setLoading] = useState(true);
   const [locationError, setLocationError] = useState(null);
-
-  const isCheckIn = type === 'checkin';
+  const [successData, setSuccessData] = useState(null);
+  const [progressAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
     initializeLocation();
   }, []);
 
-  const initializeLocation = async () => {
+  const initializeLocation = useCallback(async () => {
     setLoading(true);
-    
-    // Get user's assigned workplace
-    const location = await getLocationById(user?.location);
-    setWorkplace(location);
+    setLocationError(null);
 
-    // Get current location
-    const locationResult = await getCurrentLocation();
-    
-    if (!locationResult.success) {
-      setLocationError(locationResult.error);
+    try {
+      // 1. Get user's assigned workplace from backend
+      const locationId = user?.location || user?.locationId;
+      let workplaceData = null;
+
+      if (locationId) {
+        workplaceData = await getLocationById(
+          typeof locationId === 'object' ? locationId._id || locationId.id : locationId
+        );
+        setWorkplace(workplaceData);
+      }
+
+      // 2. Get user's current GPS position
+      const locationResult = await getCurrentLocation();
+      if (!locationResult.success) {
+        setLocationError(locationResult.error || 'Could not get your location. Please enable GPS.');
+        setLoading(false);
+        return;
+      }
+
+      setUserLocation(locationResult.location);
+
+      // 3. Point-based geofence check (local calculation)
+      if (workplaceData) {
+        const geo = checkPointInGeofence(locationResult.location, workplaceData);
+        setIsInsideGeofence(geo.isInside);
+        setDistanceToWorkplace(geo.distance);
+      } else {
+        // No workplace assigned - be permissive (admin hasn't assigned location)
+        setIsInsideGeofence(true);
+        setDistanceToWorkplace(0);
+      }
+    } catch (error) {
+      console.error('[mark-attendance] initializeLocation error:', error);
+      setLocationError('Unexpected error getting your location. Please retry.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setUserLocation(locationResult.location);
-
-    // Check geofence
-    const geofenceResult = await checkGeofence(locationResult.location);
-    if (geofenceResult.success) {
-      setIsInsideGeofence(geofenceResult.isInside);
-      setDistance(geofenceResult.distance);
-    }
-
-    setLoading(false);
-  };
+  }, [user, getCurrentLocation]);
 
   const handleProceedToCamera = () => {
-    if (!isInsideGeofence) {
+    if (!isInsideGeofence && workplace) {
       Alert.alert(
-        'Outside Geofence',
-        'You must be within the workplace area to mark attendance.',
-        [{ text: 'OK' }]
+        '📍 Outside Workplace',
+        `You are ${formatDistance(distanceToWorkplace)} from ${workplace.name}.\n\nYou must be within ${workplace.radius || 200}m to mark attendance.`,
+        [
+          { text: 'Retry Location', onPress: initializeLocation },
+          { text: 'Cancel', style: 'cancel' },
+        ]
       );
       return;
     }
@@ -94,234 +132,412 @@ export default function MarkAttendanceScreen() {
   };
 
   const handleCapture = async (photo) => {
-    setCapturedPhoto(photo);
     setCurrentStep(STEPS.PROCESSING);
+    startProgressAnimation();
 
-    // Save photo to local storage
-    const fileName = `attendance_${Date.now()}.jpg`;
-    const localUri = FileSystem.documentDirectory + fileName;
-    
+    const locationId = user?.location || user?.locationId;
+    const locationIdStr = typeof locationId === 'object'
+      ? (locationId._id || locationId.id)
+      : locationId;
+
     try {
-      await FileSystem.copyAsync({
-        from: photo.uri,
-        to: localUri,
-      });
-
-      // Mark attendance
       const result = isCheckIn
-        ? await markCheckIn(userLocation, localUri)
-        : await markCheckOut(userLocation, localUri);
+        ? await markCheckIn(userLocation, photo?.uri || null, locationIdStr)
+        : await markCheckOut(userLocation, photo?.uri || null, locationIdStr);
 
       if (result.success) {
+        setSuccessData({
+          time: formatTime(new Date()),
+          workplace: workplace?.name || 'Workplace',
+          type: isCheckIn ? 'Check-In' : 'Check-Out',
+        });
         setCurrentStep(STEPS.SUCCESS);
       } else {
-        Alert.alert('Error', result.error, [
-          { text: 'OK', onPress: () => setCurrentStep(STEPS.LOCATION) },
-        ]);
+        Alert.alert(
+          'Attendance Failed',
+          result.error || 'Could not process your attendance. Please try again.',
+          [{ text: 'Retry', onPress: () => setCurrentStep(STEPS.LOCATION) }]
+        );
       }
     } catch (error) {
-      console.error('Error saving photo:', error);
-      Alert.alert('Error', 'Failed to save photo. Please try again.', [
-        { text: 'OK', onPress: () => setCurrentStep(STEPS.CAMERA) },
+      console.error('[mark-attendance] handleCapture error:', error);
+      Alert.alert('Error', 'An unexpected error occurred.', [
+        { text: 'OK', onPress: () => setCurrentStep(STEPS.LOCATION) },
       ]);
     }
   };
 
-  const handleSuccessComplete = () => {
-    router.replace('/(tabs)');
+  // Skip photo if camera not available
+  const handleSkipPhoto = () => handleCapture(null);
+
+  const startProgressAnimation = () => {
+    progressAnim.setValue(0);
+    Animated.timing(progressAnim, {
+      toValue: 1,
+      duration: 3000,
+      useNativeDriver: false,
+    }).start();
   };
 
-  const renderLocationStep = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>
-        {isCheckIn ? 'Mark Check-In' : 'Mark Check-Out'}
-      </Text>
-      <Text style={styles.stepDescription}>
-        Verify your location before marking attendance
-      </Text>
+  // ─── Render: Loading ───────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Getting your location...</Text>
+          <Text style={styles.loadingSubText}>Please ensure GPS is enabled</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-      {locationError ? (
-        <Card style={styles.errorCard}>
-          <Ionicons name="location-off" size={48} color={Colors.error} />
-          <Text style={styles.errorTitle}>Location Error</Text>
-          <Text style={styles.errorMessage}>{locationError}</Text>
-          <Button
-            title="Retry"
-            onPress={initializeLocation}
-            variant="outline"
-            style={styles.retryButton}
-          />
-        </Card>
-      ) : (
-        <>
-          <GeofenceMap
-            userLocation={userLocation}
-            workplace={workplace}
-            isInsideGeofence={isInsideGeofence}
-            distance={distance}
-            style={styles.map}
-          />
+  // ─── Render: Location Step ─────────────────────────────────────────────────
+  if (currentStep === STEPS.LOCATION) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" />
+        <LinearGradient
+          colors={[isCheckIn ? '#1C4CA6' : '#7C3AED', isCheckIn ? '#2563EB' : '#9333EA']}
+          style={styles.headerGradient}
+        >
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{isCheckIn ? '🟢 Check In' : '🔴 Check Out'}</Text>
+          <Text style={styles.headerSubtitle}>
+            {isCheckIn ? 'Start your work day' : 'End your work day'}
+          </Text>
+        </LinearGradient>
 
-          <Card style={styles.statusCard}>
-            <View style={styles.statusRow}>
-              <Ionicons
-                name={isInsideGeofence ? 'checkmark-circle' : 'close-circle'}
-                size={28}
-                color={isInsideGeofence ? Colors.success : Colors.error}
-              />
-              <View style={styles.statusTextContainer}>
-                <Text style={styles.statusTitle}>
-                  {isInsideGeofence ? 'Inside Workplace' : 'Outside Workplace'}
-                </Text>
-                <Text style={styles.statusSubtitle}>
-                  Distance: {formatDistance(distance)}
-                </Text>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+          {locationError ? (
+            <View style={styles.errorContainer}>
+              <View style={styles.errorIconCircle}>
+                <Ionicons name="location-off" size={48} color={COLORS.error} />
               </View>
+              <Text style={styles.errorTitle}>Location Unavailable</Text>
+              <Text style={styles.errorMessage}>{locationError}</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={initializeLocation}>
+                <Ionicons name="refresh" size={18} color="#FFF" />
+                <Text style={styles.retryBtnText}>Try Again</Text>
+              </TouchableOpacity>
             </View>
-          </Card>
+          ) : (
+            <>
+              {/* Location Status Card */}
+              <View style={[styles.statusCard, isInsideGeofence ? styles.successCard : styles.errorCard2]}>
+                <View style={styles.statusIconRow}>
+                  <View style={[styles.statusIcon, { backgroundColor: isInsideGeofence ? '#D1FAE5' : '#FEE2E2' }]}>
+                    <Ionicons
+                      name={isInsideGeofence ? 'checkmark-circle' : 'warning'}
+                      size={32}
+                      color={isInsideGeofence ? COLORS.success : COLORS.error}
+                    />
+                  </View>
+                  <View style={styles.statusInfo}>
+                    <Text style={styles.statusLabel}>
+                      {isInsideGeofence ? '✓ Within Workplace Area' : '⚠ Outside Workplace Area'}
+                    </Text>
+                    <Text style={styles.statusWorkplace}>
+                      {workplace?.name || 'No workplace assigned'}
+                    </Text>
+                  </View>
+                </View>
 
-          <Button
-            title={isCheckIn ? 'Capture Check-In Photo' : 'Capture Check-Out Photo'}
-            onPress={handleProceedToCamera}
-            variant={isInsideGeofence ? 'success' : 'secondary'}
-            icon="camera"
-            disabled={!isInsideGeofence}
-            fullWidth
-            style={styles.proceedButton}
-          />
+                {distanceToWorkplace !== null && (
+                  <View style={styles.distanceRow}>
+                    <MaterialCommunityIcons name="map-marker-distance" size={16} color={COLORS.textSecondary} />
+                    <Text style={styles.distanceText}>
+                      Distance: {formatDistance(distanceToWorkplace)}
+                      {workplace?.radius ? `  (Allowed: ${workplace.radius}m)` : ''}
+                    </Text>
+                  </View>
+                )}
+              </View>
 
-          {!isInsideGeofence && (
-            <Text style={styles.warningText}>
-              You must be within {workplace?.radius || 200} meters of your workplace to mark attendance
-            </Text>
+              {/* Current Location Info */}
+              {userLocation && (
+                <View style={styles.coordsCard}>
+                  <Text style={styles.coordsLabel}>
+                    <Ionicons name="locate" size={14} color={COLORS.primary} /> Your location
+                  </Text>
+                  <Text style={styles.coordsText}>
+                    {userLocation.latitude.toFixed(5)}, {userLocation.longitude.toFixed(5)}
+                  </Text>
+                  {userLocation.accuracy && (
+                    <Text style={styles.coordsAccuracy}>
+                      Accuracy: ±{Math.round(userLocation.accuracy)}m
+                    </Text>
+                  )}
+                </View>
+              )}
+
+              {/* Time display */}
+              <View style={styles.timeCard}>
+                <Text style={styles.timeLabel}>Current Time</Text>
+                <Text style={styles.timeDisplay}>{formatTime(new Date())}</Text>
+              </View>
+
+              {/* Action buttons */}
+              <TouchableOpacity
+                style={[styles.mainBtn, { backgroundColor: isCheckIn ? COLORS.primary : '#7C3AED' }]}
+                onPress={handleProceedToCamera}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="camera" size={22} color="#FFF" />
+                <Text style={styles.mainBtnText}>
+                  {isCheckIn ? 'Proceed to Check-In' : 'Proceed to Check-Out'}
+                </Text>
+              </TouchableOpacity>
+
+              {!isInsideGeofence && workplace && (
+                <Text style={styles.warningHint}>
+                  You must be within {workplace.radius || 200}m of {workplace.name} to mark attendance.
+                </Text>
+              )}
+
+              <TouchableOpacity style={styles.refreshBtn} onPress={initializeLocation}>
+                <Ionicons name="refresh" size={16} color={COLORS.primary} />
+                <Text style={styles.refreshText}>Refresh Location</Text>
+              </TouchableOpacity>
+            </>
           )}
-        </>
-      )}
-    </View>
-  );
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
-  const renderCameraStep = () => (
-    <View style={styles.stepContainer}>
-      <CameraView
-        onCapture={handleCapture}
-        onCancel={() => setCurrentStep(STEPS.LOCATION)}
-      />
-    </View>
-  );
+  // ─── Render: Camera Step ───────────────────────────────────────────────────
+  if (currentStep === STEPS.CAMERA) {
+    if (CameraViewComponent) {
+      return (
+        <SafeAreaView style={styles.container} edges={[]}>
+          <StatusBar style="light" />
+          <CameraViewComponent
+            onCapture={handleCapture}
+            onCancel={() => setCurrentStep(STEPS.LOCATION)}
+            instruction={isCheckIn ? 'Take a selfie for check-in' : 'Take a selfie for check-out'}
+          />
+        </SafeAreaView>
+      );
+    }
+    // Fallback if camera component not available
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" />
+        <LinearGradient colors={['#1C4CA6', '#2563EB']} style={styles.headerGradient}>
+          <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep(STEPS.LOCATION)}>
+            <Ionicons name="arrow-back" size={24} color="#FFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>📸 Photo Capture</Text>
+          <Text style={styles.headerSubtitle}>Camera not available on this device</Text>
+        </LinearGradient>
+        <View style={styles.noCameraContainer}>
+          <Ionicons name="camera-outline" size={80} color={COLORS.border} />
+          <Text style={styles.noCameraTitle}>Camera unavailable</Text>
+          <Text style={styles.noCameraText}>
+            Continue marking attendance without a photo.
+          </Text>
+          <TouchableOpacity style={[styles.mainBtn, { marginTop: 24 }]} onPress={handleSkipPhoto}>
+            <Ionicons name="checkmark-circle" size={22} color="#FFF" />
+            <Text style={styles.mainBtnText}>Continue Without Photo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.refreshBtn} onPress={() => setCurrentStep(STEPS.LOCATION)}>
+            <Ionicons name="arrow-back" size={16} color={COLORS.primary} />
+            <Text style={styles.refreshText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-  const renderProcessingStep = () => (
-    <View style={styles.processingContainer}>
-      <Loading visible={true} message={`Processing ${isCheckIn ? 'Check-In' : 'Check-Out'}...`} />
-    </View>
-  );
+  // ─── Render: Processing ────────────────────────────────────────────────────
+  if (currentStep === STEPS.PROCESSING) {
+    const progressWidth = progressAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0%', '100%'],
+    });
 
-  const renderSuccessStep = () => (
-    <SuccessAnimation
-      visible={true}
-      title={isCheckIn ? 'Check-In Successful!' : 'Check-Out Successful!'}
-      message={`You have successfully marked your ${isCheckIn ? 'check-in' : 'check-out'} at ${formatTime(new Date())}`}
-      onComplete={handleSuccessComplete}
-    />
-  );
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" />
+        <View style={styles.processingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.processingTitle}>Processing...</Text>
+          <Text style={styles.processingSubText}>
+            Submitting your {isCheckIn ? 'check-in' : 'check-out'}
+          </Text>
+          <View style={styles.progressBar}>
+            <Animated.View style={[styles.progressFill, { width: progressWidth, backgroundColor: isCheckIn ? COLORS.primary : '#7C3AED' }]} />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <StatusBar style="light" backgroundColor={Colors.primary} />
-      
-      {currentStep !== STEPS.CAMERA && currentStep !== STEPS.SUCCESS && (
-        <Header
-          title={isCheckIn ? 'Check-In' : 'Check-Out'}
-          showBack
-          onBackPress={() => router.back()}
-        />
-      )}
+  // ─── Render: Success ───────────────────────────────────────────────────────
+  if (currentStep === STEPS.SUCCESS) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <LinearGradient
+          colors={[COLORS.success, '#059669']}
+          style={styles.successFullscreen}
+        >
+          <View style={styles.successIconCircle}>
+            <Ionicons name="checkmark" size={72} color="#FFF" />
+          </View>
+          <Text style={styles.successTitle}>
+            {isCheckIn ? 'Checked In! 🎉' : 'Checked Out! 👋'}
+          </Text>
+          <Text style={styles.successSubtitle}>{successData?.time || ''}</Text>
+          {successData?.workplace && (
+            <View style={styles.successLocation}>
+              <Ionicons name="location" size={16} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.successLocationText}>{successData.workplace}</Text>
+            </View>
+          )}
+          <TouchableOpacity style={styles.successBtn} onPress={() => router.replace('/(tabs)')}>
+            <Text style={styles.successBtnText}>Go to Dashboard</Text>
+            <Ionicons name="arrow-forward" size={18} color={COLORS.success} />
+          </TouchableOpacity>
+        </LinearGradient>
+      </SafeAreaView>
+    );
+  }
 
-      {currentStep === STEPS.LOCATION && renderLocationStep()}
-      {currentStep === STEPS.CAMERA && renderCameraStep()}
-      {currentStep === STEPS.PROCESSING && renderProcessingStep()}
-      {currentStep === STEPS.SUCCESS && renderSuccessStep()}
-
-      <Loading visible={loading} overlay />
-    </SafeAreaView>
-  );
+  return null;
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
+  container: { flex: 1, backgroundColor: COLORS.background },
+
+  // ─── Loading ─────────────────────────────────────────────────────
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  loadingText: { fontSize: 18, fontWeight: '600', color: COLORS.text, marginTop: 16 },
+  loadingSubText: { fontSize: 14, color: COLORS.textSecondary, marginTop: 6 },
+
+  // ─── Header ──────────────────────────────────────────────────────
+  headerGradient: { paddingTop: 52, paddingBottom: 24, paddingHorizontal: 20 },
+  backButton: { marginBottom: 16 },
+  headerTitle: { fontSize: 28, fontWeight: '800', color: '#FFF' },
+  headerSubtitle: { fontSize: 15, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 20 },
+
+  // ─── Status Cards ─────────────────────────────────────────────────
+  statusCard: { borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1 },
+  successCard: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
   },
-  stepContainer: {
-    flex: 1,
-    padding: 16,
+  errorCard2: {
+    backgroundColor: '#FFF1F2',
+    borderColor: '#FECACA',
   },
-  stepTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.text,
-    marginBottom: 8,
+  statusIconRow: { flexDirection: 'row', alignItems: 'center' },
+  statusIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  statusInfo: { flex: 1, marginLeft: 14 },
+  statusLabel: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  statusWorkplace: { fontSize: 13, color: COLORS.textSecondary, marginTop: 3 },
+  distanceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.06)' },
+  distanceText: { fontSize: 13, color: COLORS.textSecondary, marginLeft: 6 },
+
+  // ─── Coords Card ──────────────────────────────────────────────────
+  coordsCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  stepDescription: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: 16,
+  coordsLabel: { fontSize: 12, color: COLORS.primary, fontWeight: '600', marginBottom: 6 },
+  coordsText: { fontSize: 14, color: COLORS.text, fontFamily: 'monospace' },
+  coordsAccuracy: { fontSize: 11, color: COLORS.textSecondary, marginTop: 4 },
+
+  // ─── Time Card ────────────────────────────────────────────────────
+  timeCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
   },
-  map: {
-    height: 300,
-    marginBottom: 16,
-  },
-  statusCard: {
-    marginBottom: 16,
-  },
-  statusRow: {
+  timeLabel: { fontSize: 12, color: COLORS.textSecondary, fontWeight: '500' },
+  timeDisplay: { fontSize: 32, fontWeight: '800', color: COLORS.text, marginTop: 4 },
+
+  // ─── Buttons ──────────────────────────────────────────────────────
+  mainBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  statusTextContainer: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  statusTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-  },
-  statusSubtitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  proceedButton: {
-    marginBottom: 12,
-  },
-  warningText: {
-    fontSize: 12,
-    color: Colors.warning,
-    textAlign: 'center',
-  },
-  errorCard: {
-    alignItems: 'center',
-    padding: 32,
-  },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.text,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  errorMessage: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  retryButton: {
-    minWidth: 120,
-  },
-  processingContainer: {
-    flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    borderRadius: 14,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
+  mainBtnText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
+  warningHint: { fontSize: 12, color: COLORS.warning, textAlign: 'center', marginBottom: 12 },
+  refreshBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 10 },
+  refreshText: { fontSize: 14, color: COLORS.primary, fontWeight: '500' },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.error,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    marginTop: 20,
+  },
+  retryBtnText: { color: '#FFF', fontSize: 15, fontWeight: '600' },
+
+  // ─── Error ────────────────────────────────────────────────────────
+  errorContainer: { alignItems: 'center', paddingVertical: 48 },
+  errorIconCircle: {
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: '#FEE2E2', alignItems: 'center', justifyContent: 'center', marginBottom: 24,
+  },
+  errorTitle: { fontSize: 20, fontWeight: '700', color: COLORS.text, marginBottom: 10 },
+  errorMessage: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22, paddingHorizontal: 20 },
+
+  // ─── Processing ────────────────────────────────────────────────────
+  processingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
+  processingTitle: { fontSize: 22, fontWeight: '700', color: COLORS.text, marginTop: 20 },
+  processingSubText: { fontSize: 15, color: COLORS.textSecondary, marginTop: 10, textAlign: 'center' },
+  progressBar: { width: '80%', height: 6, backgroundColor: COLORS.border, borderRadius: 4, marginTop: 32, overflow: 'hidden' },
+  progressFill: { height: 6, borderRadius: 4 },
+
+  // ─── No Camera ────────────────────────────────────────────────────
+  noCameraContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
+  noCameraTitle: { fontSize: 20, fontWeight: '700', color: COLORS.text, marginTop: 20 },
+  noCameraText: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', marginTop: 8 },
+
+  // ─── Success ──────────────────────────────────────────────────────
+  successFullscreen: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
+  successIconCircle: {
+    width: 140, height: 140, borderRadius: 70,
+    backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center', marginBottom: 32,
+  },
+  successTitle: { fontSize: 36, fontWeight: '900', color: '#FFF', textAlign: 'center' },
+  successSubtitle: { fontSize: 18, color: 'rgba(255,255,255,0.9)', marginTop: 12 },
+  successLocation: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
+  successLocationText: { fontSize: 14, color: 'rgba(255,255,255,0.8)' },
+  successBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#FFF', paddingVertical: 16, paddingHorizontal: 32,
+    borderRadius: 14, marginTop: 48,
+  },
+  successBtnText: { color: COLORS.success, fontSize: 17, fontWeight: '700' },
 });

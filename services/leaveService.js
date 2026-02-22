@@ -1,247 +1,105 @@
 /**
- * AAI Attendance App - Leave Service
- * Handles leave applications, balances, and management
+ * AAI Attendance App - Leave Service (API-connected)
+ * All leave operations go through Next.js backend API
  */
 
-import { STORAGE_KEYS, LEAVE_CONFIG } from '../constants/config';
-import { storeData, getData, updateInArray } from '../utils/storageUtils';
-import { getWorkingDays, formatDate } from '../utils/dateUtils';
-import { validateLeaveApplication } from '../utils/validationUtils';
+import { API_ENDPOINTS } from '../constants/api';
+import { api } from '../utils/apiClient';
 
 /**
- * Get leave balances for an employee
- * @param {string} employeeId - Employee ID
- * @returns {Promise<Object>} Leave balances
+ * Get leave balances from API
  */
-export const getLeaveBalances = async (employeeId) => {
+export const getLeaveBalances = async () => {
   try {
-    const allBalances = await getData(STORAGE_KEYS.LEAVE_BALANCES, {});
-    const userBalances = allBalances[employeeId];
-
-    if (!userBalances) {
-      // Initialize default balances
-      const defaultBalances = {
+    const result = await api.get(API_ENDPOINTS.LEAVE_BALANCE);
+    if (result.success) {
+      return result.balances || result.data || {
         CL: { total: 15, used: 0, remaining: 15 },
         SL: { total: 12, used: 0, remaining: 12 },
         EL: { total: 15, used: 0, remaining: 15 },
       };
-      
-      allBalances[employeeId] = defaultBalances;
-      await storeData(STORAGE_KEYS.LEAVE_BALANCES, allBalances);
-      
-      return defaultBalances;
     }
-
-    return userBalances;
+    return getDefaultBalances();
   } catch (error) {
-    console.error('Get leave balances error:', error);
-    return LEAVE_CONFIG.defaultBalances;
+    console.error('[leaveService] getLeaveBalances:', error);
+    return getDefaultBalances();
   }
 };
 
+const getDefaultBalances = () => ({
+  CL: { total: 15, used: 0, remaining: 15 },
+  SL: { total: 12, used: 0, remaining: 12 },
+  EL: { total: 15, used: 0, remaining: 15 },
+});
+
 /**
- * Apply for leave
- * @param {string} employeeId - Employee ID
- * @param {Object} leaveData - Leave application data
- * @returns {Promise<Object>} Application result
+ * Apply for leave via API
  */
-export const applyForLeave = async (employeeId, leaveData) => {
+export const applyForLeave = async (leaveData) => {
   try {
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // Get leave balances
-    const leaveBalances = await getLeaveBalances(employeeId);
-
-    // Calculate number of days
-    const startDate = new Date(leaveData.startDate);
-    const endDate = new Date(leaveData.endDate);
-    const numberOfDays = getWorkingDays(startDate, endDate);
-
-    const applicationData = {
-      ...leaveData,
-      numberOfDays,
-    };
-
-    // Validate application
-    const validation = validateLeaveApplication(applicationData, leaveBalances);
-    if (!validation.isValid) {
-      return {
-        success: false,
-        errors: validation.errors,
-      };
-    }
-
-    // Check for overlapping leaves
-    const hasOverlap = await checkOverlappingLeaves(
-      employeeId,
-      leaveData.startDate,
-      leaveData.endDate
-    );
-
-    if (hasOverlap) {
-      return {
-        success: false,
-        errors: {
-          dateRange: 'You already have a leave application for these dates',
-        },
-      };
-    }
-
-    // Create leave application
-    const application = {
-      id: `LEV${Date.now()}`,
-      employeeId,
+    const result = await api.post(API_ENDPOINTS.LEAVE_APPLY, {
       leaveType: leaveData.leaveType,
       startDate: leaveData.startDate,
       endDate: leaveData.endDate,
-      numberOfDays,
       reason: leaveData.reason,
-      documents: leaveData.documents || [],
-      status: 'pending',
-      appliedAt: new Date().toISOString(),
-      syncStatus: 'pending',
-    };
-
-    // Save application
-    const applications = await getData(STORAGE_KEYS.LEAVE_APPLICATIONS, []);
-    applications.push(application);
-    await storeData(STORAGE_KEYS.LEAVE_APPLICATIONS, applications);
-
-    // Add to sync queue
-    await addToSyncQueue({
-      type: 'leave',
-      action: 'apply',
-      data: application,
     });
 
     return {
-      success: true,
-      message: 'Leave application submitted successfully',
-      application,
+      success: result.success,
+      message: result.message,
+      application: result.application || result.leave,
+      error: result.error,
+      errors: result.errors,
     };
   } catch (error) {
-    console.error('Apply for leave error:', error);
-    return {
-      success: false,
-      errors: {
-        general: 'Error submitting leave application. Please try again.',
-      },
-    };
+    console.error('[leaveService] applyForLeave:', error);
+    return { success: false, errors: { general: 'Error submitting leave. Try again.' } };
   }
 };
 
 /**
- * Check for overlapping leave dates
- * @param {string} employeeId - Employee ID
- * @param {string} startDate - Start date
- * @param {string} endDate - End date
- * @returns {Promise<boolean>} True if overlap exists
+ * Get leave applications from API
  */
-const checkOverlappingLeaves = async (employeeId, startDate, endDate) => {
+export const getLeaveApplications = async (status = null, page = 1) => {
   try {
-    const applications = await getData(STORAGE_KEYS.LEAVE_APPLICATIONS, []);
-    const userApplications = applications.filter(
-      a => a.employeeId === employeeId && ['pending', 'approved'].includes(a.status)
-    );
+    const params = new URLSearchParams({ page: String(page), limit: '20' });
+    if (status) params.set('status', status);
 
-    const newStart = new Date(startDate);
-    const newEnd = new Date(endDate);
-
-    return userApplications.some(app => {
-      const appStart = new Date(app.startDate);
-      const appEnd = new Date(app.endDate);
-
-      return (
-        (newStart >= appStart && newStart <= appEnd) ||
-        (newEnd >= appStart && newEnd <= appEnd) ||
-        (newStart <= appStart && newEnd >= appEnd)
-      );
-    });
-  } catch (error) {
-    console.error('Check overlapping leaves error:', error);
-    return false;
-  }
-};
-
-/**
- * Get leave applications for an employee
- * @param {string} employeeId - Employee ID
- * @param {string} status - Filter by status (optional)
- * @returns {Promise<Array>} Leave applications
- */
-export const getLeaveApplications = async (employeeId, status = null) => {
-  try {
-    const applications = await getData(STORAGE_KEYS.LEAVE_APPLICATIONS, []);
-    let userApplications = applications.filter(a => a.employeeId === employeeId);
-
-    if (status) {
-      userApplications = userApplications.filter(a => a.status === status);
+    const result = await api.get(`${API_ENDPOINTS.LEAVES}?${params}`);
+    if (result.success) {
+      return result.leaves || result.applications || [];
     }
-
-    // Sort by applied date descending
-    return userApplications.sort((a, b) => 
-      new Date(b.appliedAt) - new Date(a.appliedAt)
-    );
+    return [];
   } catch (error) {
-    console.error('Get leave applications error:', error);
+    console.error('[leaveService] getLeaveApplications:', error);
     return [];
   }
 };
 
 /**
- * Cancel leave application
- * @param {string} applicationId - Application ID
- * @returns {Promise<Object>} Cancel result
+ * Cancel leave application via API
  */
 export const cancelLeaveApplication = async (applicationId) => {
   try {
-    const applications = await getData(STORAGE_KEYS.LEAVE_APPLICATIONS, []);
-    const appIndex = applications.findIndex(a => a.id === applicationId);
-
-    if (appIndex === -1) {
-      return {
-        success: false,
-        error: 'Application not found',
-      };
-    }
-
-    if (applications[appIndex].status !== 'pending') {
-      return {
-        success: false,
-        error: 'Only pending applications can be cancelled',
-      };
-    }
-
-    applications[appIndex].status = 'cancelled';
-    applications[appIndex].cancelledAt = new Date().toISOString();
-
-    await storeData(STORAGE_KEYS.LEAVE_APPLICATIONS, applications);
-
+    const result = await api.patch(API_ENDPOINTS.LEAVE_CANCEL(applicationId), {});
     return {
-      success: true,
-      message: 'Application cancelled successfully',
+      success: result.success,
+      message: result.message,
+      error: result.error,
     };
   } catch (error) {
-    console.error('Cancel leave application error:', error);
-    return {
-      success: false,
-      error: 'Error cancelling application',
-    };
+    console.error('[leaveService] cancelLeaveApplication:', error);
+    return { success: false, error: 'Error cancelling leave' };
   }
 };
 
 /**
- * Get leave history with filters
- * @param {string} employeeId - Employee ID
- * @param {Object} filters - Filter options
- * @returns {Promise<Object>} Grouped leave history
+ * Get leave history (grouped)
  */
-export const getLeaveHistory = async (employeeId, filters = {}) => {
+export const getLeaveHistory = async (filters = {}) => {
   try {
-    const applications = await getLeaveApplications(employeeId);
+    const applications = await getLeaveApplications();
 
-    // Group by status
     const grouped = {
       pending: applications.filter(a => a.status === 'pending'),
       approved: applications.filter(a => a.status === 'approved'),
@@ -249,65 +107,45 @@ export const getLeaveHistory = async (employeeId, filters = {}) => {
       cancelled: applications.filter(a => a.status === 'cancelled'),
     };
 
-    // Apply filters
     if (filters.leaveType) {
       Object.keys(grouped).forEach(key => {
         grouped[key] = grouped[key].filter(a => a.leaveType === filters.leaveType);
       });
     }
 
-    if (filters.year) {
-      Object.keys(grouped).forEach(key => {
-        grouped[key] = grouped[key].filter(a => {
-          const appYear = new Date(a.startDate).getFullYear();
-          return appYear === filters.year;
-        });
-      });
-    }
-
     return grouped;
   } catch (error) {
-    console.error('Get leave history error:', error);
-    return {
-      pending: [],
-      approved: [],
-      rejected: [],
-      cancelled: [],
-    };
+    console.error('[leaveService] getLeaveHistory:', error);
+    return { pending: [], approved: [], rejected: [], cancelled: [] };
   }
 };
 
 /**
- * Get leave statistics
- * @param {string} employeeId - Employee ID
- * @returns {Promise<Object>} Leave statistics
+ * Get leave stats
  */
-export const getLeaveStats = async (employeeId) => {
+export const getLeaveStats = async () => {
   try {
-    const balances = await getLeaveBalances(employeeId);
-    const applications = await getLeaveApplications(employeeId);
+    const [balances, applications] = await Promise.all([
+      getLeaveBalances(),
+      getLeaveApplications(),
+    ]);
 
-    const approvedLeaves = applications.filter(a => a.status === 'approved');
-    const pendingLeaves = applications.filter(a => a.status === 'pending');
-    const rejectedLeaves = applications.filter(a => a.status === 'rejected');
-
-    const totalApprovedDays = approvedLeaves.reduce(
-      (sum, a) => sum + a.numberOfDays, 
-      0
-    );
+    const approved = applications.filter(a => a.status === 'approved');
+    const pending = applications.filter(a => a.status === 'pending');
+    const rejected = applications.filter(a => a.status === 'rejected');
 
     return {
       balances,
       totalApplications: applications.length,
-      approvedCount: approvedLeaves.length,
-      pendingCount: pendingLeaves.length,
-      rejectedCount: rejectedLeaves.length,
-      totalApprovedDays,
+      approvedCount: approved.length,
+      pendingCount: pending.length,
+      rejectedCount: rejected.length,
+      totalApprovedDays: approved.reduce((s, a) => s + (a.numberOfDays || 0), 0),
     };
   } catch (error) {
-    console.error('Get leave stats error:', error);
+    console.error('[leaveService] getLeaveStats:', error);
     return {
-      balances: LEAVE_CONFIG.defaultBalances,
+      balances: getDefaultBalances(),
       totalApplications: 0,
       approvedCount: 0,
       pendingCount: 0,
@@ -318,177 +156,33 @@ export const getLeaveStats = async (employeeId) => {
 };
 
 /**
- * Add item to sync queue
- * @param {Object} item - Item to sync
+ * Admin: Approve leave
  */
-const addToSyncQueue = async (item) => {
+export const approveLeave = async (applicationId, comments = '') => {
   try {
-    const queue = await getData(STORAGE_KEYS.SYNC_QUEUE, []);
-    queue.push({
-      id: `SYNC${Date.now()}`,
-      ...item,
-      timestamp: new Date().toISOString(),
-      retryCount: 0,
-    });
-    await storeData(STORAGE_KEYS.SYNC_QUEUE, queue);
+    const result = await api.patch(`/api/leaves/${applicationId}/approve`, { comments });
+    return { success: result.success, message: result.message, error: result.error };
   } catch (error) {
-    console.error('Add to sync queue error:', error);
-  }
-};
-
-/**
- * Sync pending leave applications
- * @returns {Promise<Object>} Sync result
- */
-export const syncLeaves = async () => {
-  try {
-    const applications = await getData(STORAGE_KEYS.LEAVE_APPLICATIONS, []);
-    const pendingApplications = applications.filter(a => a.syncStatus === 'pending');
-
-    if (pendingApplications.length === 0) {
-      return {
-        success: true,
-        synced: 0,
-        message: 'All leave applications are up to date',
-      };
-    }
-
-    // Simulate sync process
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Mark applications as synced
-    const updatedApplications = applications.map(a => {
-      if (a.syncStatus === 'pending') {
-        return { ...a, syncStatus: 'synced', syncedAt: new Date().toISOString() };
-      }
-      return a;
-    });
-
-    await storeData(STORAGE_KEYS.LEAVE_APPLICATIONS, updatedApplications);
-
-    // Update sync queue
-    const queue = await getData(STORAGE_KEYS.SYNC_QUEUE, []);
-    const updatedQueue = queue.filter(item => 
-      !(item.type === 'leave' && pendingApplications.some(a => a.id === item.data.id))
-    );
-    await storeData(STORAGE_KEYS.SYNC_QUEUE, updatedQueue);
-
-    return {
-      success: true,
-      synced: pendingApplications.length,
-      message: `${pendingApplications.length} leave application(s) synced successfully`,
-    };
-  } catch (error) {
-    console.error('Sync leaves error:', error);
-    return {
-      success: false,
-      error: 'Error syncing leave applications',
-    };
-  }
-};
-
-/**
- * Admin: Approve leave application
- * @param {string} applicationId - Application ID
- * @param {string} approverName - Approver name
- * @param {string} comments - Approval comments
- * @returns {Promise<Object>} Approval result
- */
-export const approveLeave = async (applicationId, approverName, comments = '') => {
-  try {
-    const applications = await getData(STORAGE_KEYS.LEAVE_APPLICATIONS, []);
-    const appIndex = applications.findIndex(a => a.id === applicationId);
-
-    if (appIndex === -1) {
-      return { success: false, error: 'Application not found' };
-    }
-
-    if (applications[appIndex].status !== 'pending') {
-      return { success: false, error: 'Application is not pending' };
-    }
-
-    // Update application
-    applications[appIndex].status = 'approved';
-    applications[appIndex].approvedAt = new Date().toISOString();
-    applications[appIndex].approverName = approverName;
-    applications[appIndex].comments = comments;
-
-    await storeData(STORAGE_KEYS.LEAVE_APPLICATIONS, applications);
-
-    // Update leave balance
-    const employeeId = applications[appIndex].employeeId;
-    const leaveType = applications[appIndex].leaveType;
-    const days = applications[appIndex].numberOfDays;
-
-    const allBalances = await getData(STORAGE_KEYS.LEAVE_BALANCES, {});
-    if (allBalances[employeeId] && allBalances[employeeId][leaveType]) {
-      allBalances[employeeId][leaveType].used += days;
-      allBalances[employeeId][leaveType].remaining -= days;
-      await storeData(STORAGE_KEYS.LEAVE_BALANCES, allBalances);
-    }
-
-    return {
-      success: true,
-      message: 'Leave application approved',
-    };
-  } catch (error) {
-    console.error('Approve leave error:', error);
     return { success: false, error: 'Error approving leave' };
   }
 };
 
 /**
- * Admin: Reject leave application
- * @param {string} applicationId - Application ID
- * @param {string} approverName - Approver name
- * @param {string} reason - Rejection reason
- * @returns {Promise<Object>} Rejection result
+ * Admin: Reject leave
  */
-export const rejectLeave = async (applicationId, approverName, reason = '') => {
+export const rejectLeave = async (applicationId, reason = '') => {
   try {
-    const applications = await getData(STORAGE_KEYS.LEAVE_APPLICATIONS, []);
-    const appIndex = applications.findIndex(a => a.id === applicationId);
-
-    if (appIndex === -1) {
-      return { success: false, error: 'Application not found' };
-    }
-
-    if (applications[appIndex].status !== 'pending') {
-      return { success: false, error: 'Application is not pending' };
-    }
-
-    applications[appIndex].status = 'rejected';
-    applications[appIndex].rejectedAt = new Date().toISOString();
-    applications[appIndex].approverName = approverName;
-    applications[appIndex].rejectionReason = reason;
-
-    await storeData(STORAGE_KEYS.LEAVE_APPLICATIONS, applications);
-
-    return {
-      success: true,
-      message: 'Leave application rejected',
-    };
+    const result = await api.patch(`/api/leaves/${applicationId}/reject`, { reason });
+    return { success: result.success, message: result.message, error: result.error };
   } catch (error) {
-    console.error('Reject leave error:', error);
     return { success: false, error: 'Error rejecting leave' };
   }
 };
 
 /**
- * Get all pending leave applications (for admin)
- * @returns {Promise<Array>} Pending applications
+ * Sync stubs (no longer needed, kept for compatibility)
  */
-export const getAllPendingApplications = async () => {
-  try {
-    const applications = await getData(STORAGE_KEYS.LEAVE_APPLICATIONS, []);
-    return applications
-      .filter(a => a.status === 'pending')
-      .sort((a, b) => new Date(a.appliedAt) - new Date(b.appliedAt));
-  } catch (error) {
-    console.error('Get all pending applications error:', error);
-    return [];
-  }
-};
+export const syncLeaves = async () => ({ success: true, synced: 0, message: 'Synced' });
 
 export default {
   getLeaveBalances,
@@ -500,5 +194,4 @@ export default {
   syncLeaves,
   approveLeave,
   rejectLeave,
-  getAllPendingApplications,
 };
