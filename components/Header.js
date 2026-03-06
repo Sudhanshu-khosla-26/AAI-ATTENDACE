@@ -1,11 +1,12 @@
 /**
  * AAI Attendance App - Header Component
- * App header with AAI branding
+ * Compact, navy blue, modern. iPhone 12 optimised.
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/colors';
 
@@ -23,62 +24,46 @@ const Header = ({
 }) => {
   return (
     <SafeAreaView
-      style={[
-        styles.container,
-        transparent && styles.transparentContainer,
-        style,
-      ]}
+      style={[styles.safe, transparent && styles.transparentSafe, style]}
       edges={['top']}
     >
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor={transparent ? 'transparent' : Colors.primary}
-      />
-      <View style={[styles.header, transparent && styles.transparentHeader]}>
-        <View style={styles.leftContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+
+      <View style={styles.header}>
+        {/* Left */}
+        <View style={styles.side}>
           {showBack ? (
-            <TouchableOpacity
-              onPress={onBackPress}
-              style={styles.iconButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="arrow-back" size={24} color={Colors.textWhite} />
+            <TouchableOpacity onPress={onBackPress} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Ionicons name="chevron-back" size={22} color="#fff" />
             </TouchableOpacity>
           ) : leftIcon ? (
-            <TouchableOpacity
-              onPress={onLeftPress}
-              style={styles.iconButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name={leftIcon} size={24} color={Colors.textWhite} />
+            <TouchableOpacity onPress={onLeftPress} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Ionicons name={leftIcon} size={22} color="#fff" />
             </TouchableOpacity>
           ) : (
-            <View style={styles.placeholder} />
+            /* Tiny AAI logo mark */
+            <View style={styles.logoBox}>
+              <Ionicons name="airplane" size={13} color="#FF9933" />
+            </View>
           )}
         </View>
 
-        <View style={styles.centerContainer}>
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
-          {subtitle && (
-            <Text style={styles.subtitle} numberOfLines={1}>
-              {subtitle}
-            </Text>
-          )}
+        {/* Center */}
+        <View style={styles.center}>
+          <Text style={styles.title} numberOfLines={1}>{title}</Text>
+          {subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}
         </View>
 
-        <View style={styles.rightContainer}>
+        {/* Right */}
+        <View style={styles.side}>
           {rightIcon ? (
-            <TouchableOpacity
-              onPress={onRightPress}
-              style={styles.iconButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name={rightIcon} size={24} color={Colors.textWhite} />
+            <TouchableOpacity onPress={onRightPress} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <View style={styles.iconPill}>
+                <Ionicons name={rightIcon} size={19} color="#fff" />
+              </View>
             </TouchableOpacity>
           ) : (
-            <View style={styles.placeholder} />
+            <View style={styles.iconBtn} />
           )}
         </View>
       </View>
@@ -87,58 +72,64 @@ const Header = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safe: {
     backgroundColor: Colors.primary,
   },
-  transparentContainer: {
+  transparentSafe: {
     backgroundColor: 'transparent',
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    top: 0, left: 0, right: 0,
     zIndex: 100,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    height: 56,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 52,
   },
-  transparentHeader: {
-    backgroundColor: 'rgba(10, 36, 99, 0.8)',
+  side: {
+    width: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  leftContainer: {
-    width: 40,
-    alignItems: 'flex-start',
-  },
-  centerContainer: {
+  center: {
     flex: 1,
     alignItems: 'center',
     paddingHorizontal: 8,
   },
-  rightContainer: {
-    width: 40,
-    alignItems: 'flex-end',
-  },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.textWhite,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.1,
   },
   subtitle: {
-    fontSize: 12,
-    color: Colors.textWhite,
-    opacity: 0.8,
-    marginTop: 2,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.55)',
+    marginTop: 1,
+    fontWeight: '500',
   },
-  iconButton: {
-    padding: 4,
+  logoBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,153,51,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,153,51,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  placeholder: {
-    width: 32,
-    height: 32,
+  iconBtn: {
+    padding: 2,
+  },
+  iconPill: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

@@ -35,6 +35,8 @@ function InputComponent({
   onIconPress,
   onRightIconPress,
   style = {},
+  containerStyle = {},
+  inputContainerStyle = {},
   inputStyle = {},
   labelStyle = {},
   required = false,
@@ -62,7 +64,7 @@ function InputComponent({
   const showPasswordToggle = isPassword && !iconRight;
 
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, containerStyle, style]}>
       {label && (
         <Text style={[styles.label, labelStyle]}>
           {label}
@@ -73,6 +75,7 @@ function InputComponent({
       <View
         style={[
           styles.inputContainer,
+          inputContainerStyle,
           isFocused && styles.inputContainerFocused,
           error && styles.inputContainerError,
           !editable && styles.inputContainerDisabled,
@@ -90,7 +93,7 @@ function InputComponent({
         )}
 
         <TextInput
-          ref={ref} // <--- The function now correctly passes the ref to the native engine
+          ref={ref}
           style={[
             styles.input,
             multiline && styles.inputMultiline,
@@ -140,7 +143,7 @@ const Input = memo(forwardRef(InputComponent));
 export default Input;
 
 const styles = StyleSheet.create({
-  container: { marginBottom: 16 },
+  container: { marginBottom: 16, width: '100%' },
   label: { fontSize: 14, fontWeight: '500', color: Colors.text, marginBottom: 6 },
   required: { color: Colors.error },
   inputContainer: {

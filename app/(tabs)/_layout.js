@@ -1,13 +1,12 @@
 /**
  * AAI Attendance App - Tab Layout
- * Bottom tab navigation
+ * Bottom tab navigation — Blue shaded, compact, modern.
  */
 
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, StyleSheet } from 'react-native';
-
 import Colors from '../../constants/colors';
 
 export default function TabLayout() {
@@ -16,10 +15,10 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textLight,
+        tabBarInactiveTintColor: '#9CA3AF',
         tabBarStyle: styles.tabBar,
-        tabBarLabelStyle: styles.tabBarLabel,
-        tabBarItemStyle: styles.tabBarItem,
+        tabBarLabelStyle: styles.label,
+        tabBarItemStyle: styles.item,
       }}
     >
       <Tabs.Screen
@@ -27,8 +26,8 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color, size, focused }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
-              <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
+            <View style={[styles.iconWrap, focused && styles.iconActive]}>
+              <Ionicons name={focused ? 'home' : 'home-outline'} size={20} color={color} />
             </View>
           ),
         }}
@@ -38,8 +37,8 @@ export default function TabLayout() {
         options={{
           title: 'History',
           tabBarIcon: ({ color, size, focused }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
-              <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={size} color={color} />
+            <View style={[styles.iconWrap, focused && styles.iconActive]}>
+              <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={20} color={color} />
             </View>
           ),
         }}
@@ -49,8 +48,8 @@ export default function TabLayout() {
         options={{
           title: 'Leaves',
           tabBarIcon: ({ color, size, focused }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
-              <Ionicons name={focused ? 'document-text' : 'document-text-outline'} size={size} color={color} />
+            <View style={[styles.iconWrap, focused && styles.iconActive]}>
+              <Ionicons name={focused ? 'document-text' : 'document-text-outline'} size={20} color={color} />
             </View>
           ),
         }}
@@ -60,8 +59,8 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size, focused }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
-              <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
+            <View style={[styles.iconWrap, focused && styles.iconActive]}>
+              <Ionicons name={focused ? 'person' : 'person-outline'} size={20} color={color} />
             </View>
           ),
         }}
@@ -72,31 +71,38 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: 70,
+    height: 68,
     paddingBottom: 10,
-    paddingTop: 10,
-    backgroundColor: Colors.background,
+    paddingTop: 6,
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    elevation: 8,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderTopColor: 'rgba(0, 51, 102, 0.08)',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 12,
   },
-  tabBarLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 4,
+  label: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+    letterSpacing: 0.1,
   },
-  tabBarItem: {
-    paddingVertical: 4,
+  item: {
+    paddingVertical: 2,
   },
-  iconContainer: {
+  iconWrap: {
+    width: 34,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 8,
   },
-  activeIconContainer: {
-    transform: [{ scale: 1.1 }],
+  iconActive: {
+    backgroundColor: Colors.primary + '12',
+    width: 42,
+    height: 28,
+    borderRadius: 10,
   },
 });

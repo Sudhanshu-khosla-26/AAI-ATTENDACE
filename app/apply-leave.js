@@ -1,25 +1,24 @@
 /**
  * AAI Attendance App - Apply Leave Screen
- * Leave application form
+ * Redesigned: Modern Blue, Premium, iPhone 12 optimized.
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Dimensions, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import Colors from '../constants/colors';
 import { LEAVE_CONFIG } from '../constants/config';
 import { useLeave, useAuth } from '../context';
 import Header from '../components/Header';
-import Button from '../components/Button';
-import Input from '../components/Input';
-import Card from '../components/Card';
 import Toast from '../components/Toast';
-import SuccessAnimation from '../components/SuccessAnimation';
 import { getWorkingDays, formatDate } from '../utils/dateUtils';
+
+const { width } = Dimensions.get('window');
 
 const STEPS = {
   FORM: 'form',
@@ -42,7 +41,14 @@ export default function ApplyLeaveScreen() {
 
   const calculateDays = () => {
     if (!startDate || !endDate) return 0;
-    return getWorkingDays(new Date(startDate), new Date(endDate));
+    try {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      if (isNaN(start) || isNaN(end)) return 0;
+      return getWorkingDays(start, end);
+    } catch {
+      return 0;
+    }
   };
 
   const hasSufficientBalance = () => {
@@ -54,30 +60,24 @@ export default function ApplyLeaveScreen() {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!leaveType) {
-      newErrors.leaveType = 'Please select a leave type';
-    }
+    if (!leaveType) newErrors.leaveType = 'Selection required';
+    if (!startDate) newErrors.startDate = 'Required';
+    if (!endDate) newErrors.endDate = 'Required';
 
-    if (!startDate) {
-      newErrors.startDate = 'Please select a start date';
-    }
-
-    if (!endDate) {
-      newErrors.endDate = 'Please select an end date';
-    }
-
-    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-      newErrors.endDate = 'End date must be after start date';
+    if (startDate && endDate) {
+      const s = new Date(startDate);
+      const e = new Date(endDate);
+      if (s > e) newErrors.endDate = 'Must be after start';
     }
 
     if (!reason.trim()) {
-      newErrors.reason = 'Please provide a reason';
+      newErrors.reason = 'Reason is required';
     } else if (reason.trim().length < 10) {
-      newErrors.reason = 'Reason must be at least 10 characters';
+      newErrors.reason = 'Minimum 10 characters';
     }
 
     if (!hasSufficientBalance()) {
-      newErrors.leaveType = `Insufficient leave balance. You have ${leaveBalances[leaveType]?.remaining || 0} days remaining.`;
+      newErrors.leaveType = `Insufficient balance (${leaveBalances[leaveType]?.remaining || 0} left)`;
     }
 
     setErrors(newErrors);
@@ -97,12 +97,9 @@ export default function ApplyLeaveScreen() {
     if (result.success) {
       setCurrentStep(STEPS.SUCCESS);
     } else {
-      if (result.errors) {
-        setErrors(result.errors);
-      }
       setToast({
         visible: true,
-        message: result.errors?.general || 'Failed to apply for leave',
+        message: result.error || 'Submission failed. Please check network.',
         type: 'error',
       });
     }
@@ -112,188 +109,190 @@ export default function ApplyLeaveScreen() {
     if (!showTypePicker) return null;
 
     return (
-      <View style={styles.pickerOverlay}>
-        <Card style={styles.pickerCard}>
-          <Text style={styles.pickerTitle}>Select Leave Type</Text>
-          <ScrollView style={styles.pickerList}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Leave Categories</Text>
+            <TouchableOpacity onPress={() => setShowTypePicker(false)}>
+              <Ionicons name="close" size={24} color="#94A3B8" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
             {LEAVE_CONFIG.types.map((type) => {
               const balance = leaveBalances[type.id]?.remaining || 0;
               const isSelected = leaveType === type.id;
-              
+
               return (
                 <TouchableOpacity
                   key={type.id}
-                  style={[
-                    styles.typeItem,
-                    isSelected && styles.typeItemSelected,
-                  ]}
+                  style={[styles.typeItem, isSelected && styles.typeItemSelected]}
                   onPress={() => {
                     setLeaveType(type.id);
                     setShowTypePicker(false);
                     setErrors({ ...errors, leaveType: null });
                   }}
                 >
-                  <View style={styles.typeItemLeft}>
-                    <View style={[styles.typeIcon, { backgroundColor: type.color + '20' }]}>
-                      <Ionicons name={type.icon} size={20} color={type.color} />
-                    </View>
-                    <View>
-                      <Text style={styles.typeName}>{type.name}</Text>
-                      <Text style={styles.typeBalance}>
-                        Balance: {balance} days
-                      </Text>
-                    </View>
+                  <View style={[styles.typeIcon, { backgroundColor: type.color + '15' }]}>
+                    <Ionicons name={type.icon} size={20} color={type.color} />
                   </View>
-                  {isSelected && (
-                    <Ionicons name="checkmark" size={24} color={Colors.primary} />
-                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.typeName}>{type.name}</Text>
+                    <Text style={styles.typeSub}>{balance} days available</Text>
+                  </View>
+                  {isSelected && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />}
                 </TouchableOpacity>
               );
             })}
           </ScrollView>
-          <Button
-            title="Cancel"
-            variant="outline"
-            onPress={() => setShowTypePicker(false)}
-            style={styles.pickerCancel}
-          />
-        </Card>
+        </View>
       </View>
     );
   };
 
-  const renderFormStep = () => (
-    <ScrollView contentContainerStyle={styles.scrollContent}>
-      <Text style={styles.subtitle}>
-        Fill in the details to apply for leave
-      </Text>
-
-      {/* Leave Type */}
-      <TouchableOpacity
-        style={[styles.pickerButton, errors.leaveType && styles.pickerButtonError]}
-        onPress={() => setShowTypePicker(true)}
-      >
-        <Text style={styles.pickerButtonLabel}>Leave Type</Text>
-        <View style={styles.pickerButtonContent}>
-          {leaveType ? (
-            <View style={styles.selectedType}>
-              <View style={[styles.selectedTypeIcon, { backgroundColor: getLeaveTypeColor(leaveType) + '20' }]}>
-                <Ionicons
-                  name={LEAVE_CONFIG.types.find(t => t.id === leaveType)?.icon}
-                  size={18}
-                  color={getLeaveTypeColor(leaveType)}
-                />
-              </View>
-              <Text style={styles.selectedTypeText}>{getLeaveTypeName(leaveType)}</Text>
-            </View>
-          ) : (
-            <Text style={styles.pickerButtonPlaceholder}>Select leave type</Text>
-          )}
-          <Ionicons name="chevron-down" size={20} color={Colors.textLight} />
-        </View>
-      </TouchableOpacity>
-      {errors.leaveType && <Text style={styles.errorText}>{errors.leaveType}</Text>}
-
-      {/* Date Range */}
-      <View style={styles.dateRow}>
-        <View style={styles.dateField}>
-          <Input
-            label="From Date"
-            placeholder="YYYY-MM-DD"
-            value={startDate}
-            onChangeText={(text) => {
-              setStartDate(text);
-              setErrors({ ...errors, startDate: null });
-            }}
-            icon="calendar"
-            error={errors.startDate}
-          />
-        </View>
-        <View style={styles.dateField}>
-          <Input
-            label="To Date"
-            placeholder="YYYY-MM-DD"
-            value={endDate}
-            onChangeText={(text) => {
-              setEndDate(text);
-              setErrors({ ...errors, endDate: null });
-            }}
-            icon="calendar"
-            error={errors.endDate}
-          />
-        </View>
-      </View>
-
-      {/* Days Calculation */}
-      {startDate && endDate && (
-        <Card style={styles.daysCard}>
-          <View style={styles.daysRow}>
-            <Text style={styles.daysLabel}>Number of Days:</Text>
-            <Text style={styles.daysValue}>{calculateDays()}</Text>
+  if (currentStep === STEPS.SUCCESS) {
+    return (
+      <View style={styles.successRoot}>
+        <StatusBar style="light" />
+        <LinearGradient colors={['#003366', '#0055AA']} style={styles.successContainer}>
+          <View style={styles.successCircle}>
+            <Ionicons name="send" size={40} color="#FFF" style={{ marginLeft: 4 }} />
           </View>
-          {leaveType && (
-            <View style={styles.daysRow}>
-              <Text style={styles.daysLabel}>Remaining After:</Text>
-              <Text style={styles.daysValue}>
-                {(leaveBalances[leaveType]?.remaining || 0) - calculateDays()}
-              </Text>
-            </View>
-          )}
-        </Card>
-      )}
-
-      {/* Reason */}
-      <Input
-        label="Reason for Leave"
-        placeholder="Please provide a detailed reason for your leave request..."
-        value={reason}
-        onChangeText={(text) => {
-          setReason(text);
-          setErrors({ ...errors, reason: null });
-        }}
-        multiline
-        numberOfLines={4}
-        maxLength={200}
-        error={errors.reason}
-      />
-      <Text style={styles.charCount}>{reason.length}/200</Text>
-
-      {/* Submit Button */}
-      <Button
-        title="Submit Application"
-        onPress={handleSubmit}
-        loading={loading}
-        fullWidth
-        style={styles.submitButton}
-      />
-    </ScrollView>
-  );
-
-  const renderSuccessStep = () => (
-    <SuccessAnimation
-      visible={true}
-      title="Application Submitted!"
-      message="Your leave application has been submitted successfully and is pending approval."
-      onComplete={() => router.replace('/(tabs)/leaves')}
-    />
-  );
+          <Text style={styles.successT}>Application Sent</Text>
+          <Text style={styles.successP}>Your leave request has been submitted for approval.</Text>
+          <TouchableOpacity
+            style={styles.doneBtn}
+            onPress={() => router.replace('/(tabs)/leaves')}
+          >
+            <Text style={styles.doneBtnText}>Return to Leaves</Text>
+          </TouchableOpacity>
+        </LinearGradient>
+      </View>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <StatusBar style="light" backgroundColor={Colors.primary} />
-      
-      <Header
-        title="Apply for Leave"
-        showBack
-        onBackPress={() => router.back()}
-      />
 
-      {currentStep === STEPS.FORM && renderFormStep()}
-      {currentStep === STEPS.SUCCESS && renderSuccessStep()}
+      <Header title="Request Leave" showBack onBackPress={() => router.back()} />
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerTitleText}>Submit Application</Text>
+          <Text style={styles.headerSubtitleText}>Ensure your reason is clear for quick approval.</Text>
+        </View>
+
+        {/* Leave Type Selector */}
+        <View style={styles.fieldSection}>
+          <Text style={styles.fieldLabel}>CATEGORY</Text>
+          <TouchableOpacity
+            style={[styles.selector, errors.leaveType && styles.selectorError]}
+            onPress={() => setShowTypePicker(true)}
+            activeOpacity={0.7}
+          >
+            {leaveType ? (
+              <View style={styles.selectedRow}>
+                <Ionicons name={LEAVE_CONFIG.types.find(t => t.id === leaveType)?.icon} size={18} color={getLeaveTypeColor(leaveType)} />
+                <Text style={styles.selectedText}>{getLeaveTypeName(leaveType)}</Text>
+              </View>
+            ) : (
+              <Text style={styles.placeholderText}>Select leave type</Text>
+            )}
+            <Ionicons name="chevron-down" size={20} color="#94A3B8" />
+          </TouchableOpacity>
+          {errors.leaveType && <Text style={styles.errorHint}>{errors.leaveType}</Text>}
+        </View>
+
+        {/* Date Row */}
+        <View style={styles.dateRow}>
+          <View style={styles.dateCol}>
+            <Text style={styles.fieldLabel}>START DATE</Text>
+            <View style={[styles.inputBox, errors.startDate && styles.inputBoxError]}>
+              <Ionicons name="calendar-outline" size={16} color="#94A3B8" />
+              <TextInput
+                style={styles.input}
+                placeholder="YYYY-MM-DD"
+                value={startDate}
+                onChangeText={t => { setStartDate(t); setErrors({ ...errors, startDate: null }) }}
+              />
+            </View>
+            {errors.startDate && <Text style={styles.errorHint}>{errors.startDate}</Text>}
+          </View>
+          <View style={styles.dateCol}>
+            <Text style={styles.fieldLabel}>END DATE</Text>
+            <View style={[styles.inputBox, errors.endDate && styles.inputBoxError]}>
+              <Ionicons name="calendar-outline" size={16} color="#94A3B8" />
+              <TextInput
+                style={styles.input}
+                placeholder="YYYY-MM-DD"
+                value={endDate}
+                onChangeText={t => { setEndDate(t); setErrors({ ...errors, endDate: null }) }}
+              />
+            </View>
+            {errors.endDate && <Text style={styles.errorHint}>{errors.endDate}</Text>}
+          </View>
+        </View>
+
+        {/* Days Preview */}
+        {startDate && endDate && calculateDays() > 0 && (
+          <View style={styles.previewCard}>
+            <View style={styles.previewLine}>
+              <Text style={styles.previewLabel}>Total Days</Text>
+              <Text style={styles.previewVal}>{calculateDays()} Days</Text>
+            </View>
+            {leaveType && (
+              <View style={[styles.previewLine, { borderTopWidth: 1, borderTopColor: '#F1F5F9', marginTop: 10, paddingTop: 10 }]}>
+                <Text style={styles.previewLabel}>Projected Balance</Text>
+                <Text style={[styles.previewVal, { color: Colors.primary }]}>
+                  {(leaveBalances[leaveType]?.remaining || 0) - calculateDays()} Remaining
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Reason Field */}
+        <View style={styles.fieldSection}>
+          <Text style={styles.fieldLabel}>REASON FOR LEAVE</Text>
+          <View style={[styles.areaBox, errors.reason && styles.areaBoxError]}>
+            <TextInput
+              style={styles.areaInput}
+              placeholder="Provide a valid reason for office records..."
+              multiline
+              numberOfLines={4}
+              maxLength={200}
+              value={reason}
+              onChangeText={t => { setReason(t); setErrors({ ...errors, reason: null }) }}
+            />
+            <Text style={styles.charC}>{reason.length}/200</Text>
+          </View>
+          {errors.reason && <Text style={styles.errorHint}>{errors.reason}</Text>}
+        </View>
+
+        <TouchableOpacity
+          style={styles.submitBtn}
+          onPress={handleSubmit}
+          disabled={loading}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={['#003366', '#0055AA']}
+            style={styles.btnG}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            {loading ? <ActivityIndicator size="small" color="#FFF" /> : (
+              <>
+                <Text style={styles.btnT}>Submit Request</Text>
+                <Ionicons name="arrow-forward" size={18} color="#FFF" />
+              </>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
+      </ScrollView>
 
       {renderTypePicker()}
 
-      {/* Toast */}
       <Toast
         visible={toast.visible}
         message={toast.message}
@@ -305,163 +304,84 @@ export default function ApplyLeaveScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 24,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: 20,
-  },
-  pickerButton: {
+  root: { flex: 1, backgroundColor: '#F3F6FA' },
+  scrollContent: { padding: 16, paddingBottom: 40 },
+  headerInfo: { marginBottom: 24 },
+  headerTitleText: { fontSize: 22, fontWeight: '800', color: '#1A1A2E' },
+  headerSubtitleText: { fontSize: 13, color: '#94A3B8', marginTop: 4, fontWeight: '500' },
+
+  fieldSection: { marginBottom: 20 },
+  fieldLabel: { fontSize: 10, fontWeight: '900', color: '#94A3B8', letterSpacing: 1.5, marginBottom: 8 },
+
+  selector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF',
     borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 16,
-    backgroundColor: Colors.background,
-  },
-  pickerButtonError: {
-    borderColor: Colors.error,
-  },
-  pickerButtonLabel: {
-    fontSize: 12,
-    color: Colors.textLight,
-    marginBottom: 4,
-  },
-  pickerButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  pickerButtonPlaceholder: {
-    fontSize: 16,
-    color: Colors.textLight,
-  },
-  selectedType: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  selectedTypeIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  selectedTypeText: {
-    fontSize: 16,
-    color: Colors.text,
-  },
-  errorText: {
-    fontSize: 12,
-    color: Colors.error,
-    marginTop: -12,
-    marginBottom: 12,
-  },
-  dateRow: {
-    flexDirection: 'row',
-    marginHorizontal: -8,
-  },
-  dateField: {
-    flex: 1,
-    marginHorizontal: 8,
-  },
-  daysCard: {
-    marginBottom: 16,
-    backgroundColor: Colors.primary + '08',
-  },
-  daysRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  daysLabel: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
-  daysValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text,
-  },
-  charCount: {
-    fontSize: 12,
-    color: Colors.textLight,
-    textAlign: 'right',
-    marginTop: -12,
-    marginBottom: 16,
-  },
-  submitButton: {
-    marginTop: 8,
-  },
-  pickerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.overlay,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    zIndex: 100,
-  },
-  pickerCard: {
-    width: '100%',
-    maxHeight: '80%',
-    padding: 0,
-    overflow: 'hidden',
-  },
-  pickerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.text,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
   },
-  pickerList: {
-    maxHeight: 300,
-  },
-  typeItem: {
+  selectorError: { borderColor: '#EF4444' },
+  selectedRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  selectedText: { fontSize: 15, fontWeight: '700', color: '#334155' },
+  placeholderText: { fontSize: 15, color: '#94A3B8', fontWeight: '500' },
+
+  dateRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  dateCol: { flex: 1 },
+  inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    paddingHorizontal: 14,
   },
-  typeItemSelected: {
-    backgroundColor: Colors.primary + '10',
+  inputBoxError: { borderColor: '#EF4444' },
+  input: { flex: 1, paddingVertical: 14, marginLeft: 10, fontSize: 14, fontWeight: '600', color: '#334155' },
+
+  areaBox: {
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    padding: 12,
   },
-  typeItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  typeIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  typeName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: Colors.text,
-  },
-  typeBalance: {
-    fontSize: 12,
-    color: Colors.textLight,
-    marginTop: 2,
-  },
-  pickerCancel: {
-    margin: 16,
-  },
+  areaBoxError: { borderColor: '#EF4444' },
+  areaInput: { height: 100, textAlignVertical: 'top', fontSize: 14, fontWeight: '600', color: '#334155' },
+  charC: { textAlign: 'right', fontSize: 10, color: '#94A3B8', fontWeight: '700' },
+
+  previewCard: { backgroundColor: Colors.primary + '08', borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: Colors.primary + '15' },
+  previewLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  previewLabel: { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  previewVal: { fontSize: 14, fontWeight: '800', color: '#1A1A2E' },
+
+  submitBtn: { marginTop: 10, borderRadius: 16, overflow: 'hidden', shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 15, elevation: 6 },
+  btnG: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 18, gap: 10 },
+  btnT: { color: '#FFF', fontSize: 16, fontWeight: '800' },
+
+  errorHint: { color: '#EF4444', fontSize: 10, fontWeight: '700', marginTop: 4, marginLeft: 4 },
+
+  // Modal
+  modalOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end', zIndex: 1000 },
+  modalCard: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingBottom: 40, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#1A1A2E' },
+  modalBody: { padding: 10 },
+  typeItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, marginBottom: 4 },
+  typeItemSelected: { backgroundColor: Colors.primary + '08' },
+  typeIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 16 },
+  typeName: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
+  typeSub: { fontSize: 11, color: '#94A3B8', marginTop: 2, fontWeight: '600' },
+
+  // Success
+  successRoot: { flex: 1 },
+  successContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
+  successCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+  successT: { fontSize: 28, fontWeight: '900', color: '#FFF' },
+  successP: { fontSize: 15, color: 'rgba(255,255,255,0.7)', textAlign: 'center', marginTop: 10, lineHeight: 22 },
+  doneBtn: { backgroundColor: '#FFF', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 16, marginTop: 40 },
+  doneBtnText: { color: Colors.primary, fontWeight: '800', fontSize: 16 },
 });

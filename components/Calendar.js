@@ -26,14 +26,16 @@ const Calendar = ({
   };
 
   const getStatusColor = (status) => {
-    switch (status) {
-      case 'present':
+    const s = (status || '').toUpperCase();
+    switch (s) {
+      case 'PRESENT':
         return Colors.present;
-      case 'absent':
+      case 'ABSENT':
         return Colors.absent;
-      case 'halfDay':
+      case 'HALF_DAY':
+      case 'HALFDAY':
         return Colors.halfDay;
-      case 'leave':
+      case 'LEAVE':
         return Colors.leave;
       default:
         return null;
@@ -41,14 +43,16 @@ const Calendar = ({
   };
 
   const getStatusIcon = (status) => {
-    switch (status) {
-      case 'present':
+    const s = (status || '').toUpperCase();
+    switch (s) {
+      case 'PRESENT':
         return 'checkmark';
-      case 'absent':
+      case 'ABSENT':
         return 'close';
-      case 'halfDay':
+      case 'HALF_DAY':
+      case 'HALFDAY':
         return 'remove';
-      case 'leave':
+      case 'LEAVE':
         return 'calendar';
       default:
         return null;

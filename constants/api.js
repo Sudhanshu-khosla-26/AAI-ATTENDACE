@@ -14,9 +14,20 @@
  * Physical Device  → use: http://<YOUR_LAN_IP>:3000
  */
 
-export const API_BASE_URL = __DEV__
-    ? 'http://localhost:3000'   // ← UPDATE: run `ipconfig` and paste your LAN IP here
-    : 'https://your-production-domain.com'; // ← UPDATE: your production URL
+import { Platform } from 'react-native';
+
+const getBaseUrl = () => {
+    if (!__DEV__) return 'https://your-production-domain.com';
+
+    // For Expo Web (browser), always connect via localhost to avoid CORS/LAN issues on the same machine
+    if (Platform.OS === 'web') return 'http://localhost:3000';
+
+    // For Native Android/iOS (on same network), use the machine's LAN IP
+    // Current Machine IP: 172.20.10.2
+    return 'http://172.20.10.2:3000';
+};
+
+export const API_BASE_URL = getBaseUrl();
 
 export const API_TIMEOUT = 15000; // 15 seconds
 

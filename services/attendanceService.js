@@ -7,7 +7,7 @@ import { API_ENDPOINTS } from '../constants/api';
 import { api, uploadFile } from '../utils/apiClient';
 import { getData } from '../utils/storageUtils';
 import * as Location from 'expo-location';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const USER_SESSION_KEY = '@user_session';
 
@@ -37,6 +37,8 @@ export const getAttendanceStatus = async () => {
       hasCheckedOut: !!(record?.checkOut),
       checkInTime: record?.checkIn?.time || null,
       checkOutTime: record?.checkOut?.time || null,
+      checkInPhoto: record?.checkIn?.photoUrl || record?.checkIn?.photo || null,
+      checkOutPhoto: record?.checkOut?.photoUrl || record?.checkOut?.photo || null,
       checkInLocation: record?.checkIn?.locationId?.name || null,
       checkOutLocation: record?.checkOut?.locationId?.name || null,
       totalHours: record?.duration || 0,
@@ -110,6 +112,7 @@ export const checkUserGeofence = async (userLocation, locationId) => {
  * Save photo to local attendance_photos folder
  */
 const savePhotoLocally = async (photoUri, type) => {
+  if (!photoUri) return null; // No photo to save
   try {
     const photosDir = FileSystem.documentDirectory + 'attendance_photos/';
     const dirInfo = await FileSystem.getInfoAsync(photosDir);
@@ -146,28 +149,29 @@ const uploadAttendancePhoto = async (photoUri, type) => {
  */
 export const markCheckIn = async (location, photoUri, locationId) => {
   try {
-    // Save photo locally first
-    const localPhotoUri = await savePhotoLocally(photoUri, 'checkin');
+    // Save photo locally first (null-safe)
+    const localPhotoUri = photoUri ? await savePhotoLocally(photoUri, 'checkin') : null;
 
-    // Try to upload to backend
+    // Try to upload to backend (only if a photo was taken)
     let photoUrl = null;
     if (photoUri) {
       photoUrl = await uploadAttendancePhoto(photoUri, 'checkin');
+      // If upload fails, we still proceed with check-in (photo is optional for attendance)
     }
 
     const result = await api.post(API_ENDPOINTS.CHECK_IN, {
       location: {
-        lat: location.latitude,
-        lng: location.longitude,
-        accuracy: location.accuracy,
+        lat: location?.latitude,
+        lng: location?.longitude,
+        accuracy: location?.accuracy,
       },
-      photoUrl: photoUrl || localPhotoUri,
-      localPhotoUri,
+      photoUrl: photoUrl || localPhotoUri || null,
+      localPhotoUri: localPhotoUri || null,
       locationId,
     });
 
     return {
-      success: result.success,
+      success: result.success !== false,
       message: result.message,
       error: result.error,
       record: result.record,
@@ -183,28 +187,30 @@ export const markCheckIn = async (location, photoUri, locationId) => {
  */
 export const markCheckOut = async (location, photoUri, locationId) => {
   try {
-    // Save photo locally first
-    const localPhotoUri = await savePhotoLocally(photoUri, 'checkout');
+    // Save photo locally first (null-safe)
+    const localPhotoUri = photoUri ? await savePhotoLocally(photoUri, 'checkout') : null;
 
-    // Try to upload to backend
+    // Try to upload to backend (only if a photo was taken)
     let photoUrl = null;
     if (photoUri) {
       photoUrl = await uploadAttendancePhoto(photoUri, 'checkout');
+      // If upload fails, we still proceed with check-out (photo is optional)
     }
+    console.log(`[attendanceService] MarkCheckOut: photoUri exists: ${!!photoUri}, photoUrl from server: ${!!photoUrl}, localPhotoUri: ${!!localPhotoUri}`);
 
     const result = await api.post(API_ENDPOINTS.CHECK_OUT, {
       location: {
-        lat: location.latitude,
-        lng: location.longitude,
-        accuracy: location.accuracy,
+        lat: location?.latitude,
+        lng: location?.longitude,
+        accuracy: location?.accuracy,
       },
-      photoUrl: photoUrl || localPhotoUri,
-      localPhotoUri,
+      photoUrl: photoUrl || localPhotoUri || null,
+      localPhotoUri: localPhotoUri || null,
       locationId,
     });
 
     return {
-      success: result.success,
+      success: result.success !== false,
       message: result.message,
       error: result.error,
       record: result.record,

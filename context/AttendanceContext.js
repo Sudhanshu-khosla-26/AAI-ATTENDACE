@@ -42,6 +42,8 @@ export const AttendanceProvider = ({ children }) => {
     totalDays: 0,
     presentDays: 0,
     absentDays: 0,
+    halfDays: 0,
+    leaveDays: 0,
     totalHours: 0,
     attendancePercentage: 0,
   });

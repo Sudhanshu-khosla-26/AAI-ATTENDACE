@@ -101,10 +101,10 @@ export const getLeaveHistory = async (filters = {}) => {
     const applications = await getLeaveApplications();
 
     const grouped = {
-      pending: applications.filter(a => a.status === 'pending'),
-      approved: applications.filter(a => a.status === 'approved'),
-      rejected: applications.filter(a => a.status === 'rejected'),
-      cancelled: applications.filter(a => a.status === 'cancelled'),
+      pending: applications.filter(a => (a.status || '').toUpperCase() === 'PENDING'),
+      approved: applications.filter(a => (a.status || '').toUpperCase() === 'APPROVED'),
+      rejected: applications.filter(a => (a.status || '').toUpperCase() === 'REJECTED'),
+      cancelled: applications.filter(a => (a.status || '').toUpperCase() === 'CANCELLED'),
     };
 
     if (filters.leaveType) {
@@ -130,9 +130,9 @@ export const getLeaveStats = async () => {
       getLeaveApplications(),
     ]);
 
-    const approved = applications.filter(a => a.status === 'approved');
-    const pending = applications.filter(a => a.status === 'pending');
-    const rejected = applications.filter(a => a.status === 'rejected');
+    const approved = applications.filter(a => (a.status || '').toUpperCase() === 'APPROVED');
+    const pending = applications.filter(a => (a.status || '').toUpperCase() === 'PENDING');
+    const rejected = applications.filter(a => (a.status || '').toUpperCase() === 'REJECTED');
 
     return {
       balances,

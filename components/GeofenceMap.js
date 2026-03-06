@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import MapView, { Marker, Circle, Polygon } from 'react-native-maps';
+import MapView, { Marker, Circle, Polygon } from './maps';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/colors';
 import { formatDistance, getMapRegion } from '../utils/locationUtils';

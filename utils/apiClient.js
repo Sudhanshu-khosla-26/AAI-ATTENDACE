@@ -133,13 +133,15 @@ export const uploadFile = async (endpoint, fileUri, fieldName = 'photo', extraFi
 
     const url = `${API_BASE_URL}${endpoint}`;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s for uploads
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s for uploads
 
     try {
         const response = await fetch(url, {
             method: 'POST',
+            // ⚠️ Do NOT set Content-Type here — when body is FormData,
+            // fetch automatically sets 'multipart/form-data; boundary=...' with the correct boundary.
+            // Manually setting it strips the boundary and breaks multipart parsing on the server.
             headers: {
-                'Content-Type': 'multipart/form-data',
                 ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             body: formData,
@@ -148,7 +150,13 @@ export const uploadFile = async (endpoint, fileUri, fieldName = 'photo', extraFi
 
         clearTimeout(timeoutId);
 
-        const data = await response.json();
+        let data;
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            data = { message: await response.text() };
+        }
 
         if (!response.ok) {
             return { success: false, error: data.message || `Upload failed: HTTP ${response.status}` };
@@ -157,6 +165,10 @@ export const uploadFile = async (endpoint, fileUri, fieldName = 'photo', extraFi
         return data;
     } catch (err) {
         clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+            console.error('[apiClient] uploadFile timeout — upload took too long');
+            return { success: false, error: 'Upload timed out. Check your connection speed.' };
+        }
         console.error('[apiClient] uploadFile error:', err.message);
         return { success: false, error: 'Photo upload failed. Check your connection.' };
     }

@@ -9,7 +9,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker, Circle, Polygon } from 'react-native-maps';
+import MapView, { Marker, Circle, Polygon } from '../components/maps';
 
 import Colors from '../constants/colors';
 import { getAllLocations, addLocation, updateLocation, deleteLocation, addPolygonPoint, clearPolygonPoints } from '../services/locationService';
@@ -30,7 +30,7 @@ export default function LocationManagementScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
-  
+
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -151,9 +151,9 @@ export default function LocationManagementScreen() {
 
   const handleMapPress = (e) => {
     if (!isAdding && !isEditing) return;
-    
+
     const { coordinate } = e.nativeEvent;
-    
+
     if (isDrawingPolygon) {
       setPolygonPoints([...polygonPoints, coordinate]);
     } else {
@@ -329,13 +329,13 @@ export default function LocationManagementScreen() {
           />
         )}
       </View>
-      
+
       {isDrawingPolygon && (
         <Text style={styles.polygonHint}>
           Tap on the map to add polygon points (minimum 3 points)
         </Text>
       )}
-      
+
       {polygonPoints.length > 0 && (
         <Text style={styles.polygonCount}>
           Polygon points: {polygonPoints.length}
@@ -365,7 +365,7 @@ export default function LocationManagementScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar style="light" backgroundColor={Colors.primary} />
-      
+
       <Header
         title="Location Management"
         showBack

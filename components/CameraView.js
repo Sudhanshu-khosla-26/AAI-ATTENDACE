@@ -1,10 +1,18 @@
 /**
  * AAI Attendance App - Camera View Component
- * Face capture for attendance verification
+ * Face capture for attendance verification - Fixed Permission Flow
  */
 
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  Linking,
+  ActivityIndicator,
+} from 'react-native';
 import { CameraView as ExpoCameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/colors';
@@ -21,41 +29,75 @@ const CameraView = ({
   const [facing, setFacing] = useState('front');
   const cameraRef = useRef(null);
 
-  // Request permission if not granted
+  // Auto-request permission when component mounts (if canAskAgain)
+  useEffect(() => {
+    if (permission !== null && !permission.granted && permission.canAskAgain) {
+      requestPermission();
+    }
+  }, [permission]);
+
+  // ── Step 1: Still determining permission status ──────────────────────────
   if (!permission) {
     return (
       <View style={[styles.container, styles.permissionContainer, style]}>
-        <Ionicons name="camera" size={48} color={Colors.textLight} />
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.permissionText}>Checking camera permissions…</Text>
+      </View>
+    );
+  }
+
+  // ── Step 2: Not yet granted but CAN ask → show request button ────────────
+  if (!permission.granted && permission.canAskAgain) {
+    return (
+      <View style={[styles.container, styles.permissionContainer, style]}>
+        <Ionicons name="camera" size={56} color={Colors.primary} />
         <Text style={styles.permissionTitle}>Camera Permission Required</Text>
         <Text style={styles.permissionText}>
           We need camera access to capture your photo for attendance verification.
         </Text>
         <Button
-          title="Grant Permission"
+          title="Grant Camera Access"
           onPress={requestPermission}
           style={styles.permissionButton}
+        />
+        <Button
+          title="Cancel"
+          onPress={onCancel}
+          variant="outline"
+          style={[styles.permissionButton, { marginTop: 12 }]}
         />
       </View>
     );
   }
 
+  // ── Step 3: Permanently denied → guide to device Settings ────────────────
   if (!permission.granted) {
     return (
       <View style={[styles.container, styles.permissionContainer, style]}>
-        <Ionicons name="camera-off" size={48} color={Colors.error} />
+        <Ionicons name="camera-off" size={56} color={Colors.error} />
         <Text style={styles.permissionTitle}>Camera Access Denied</Text>
         <Text style={styles.permissionText}>
-          Please enable camera access in your device settings to use this feature.
+          Camera permission was denied. Please enable it manually:{'\n\n'}
+          <Text style={styles.settingsHint}>
+            Settings → Apps → AAI Attendance → Permissions → Camera → Allow
+          </Text>
         </Text>
+        <Button
+          title="Open Settings"
+          onPress={() => Linking.openSettings()}
+          style={styles.permissionButton}
+        />
         <Button
           title="Go Back"
           onPress={onCancel}
           variant="outline"
-          style={styles.permissionButton}
+          style={[styles.permissionButton, { marginTop: 12 }]}
         />
       </View>
     );
   }
+
+  // ── Camera helpers ────────────────────────────────────────────────────────
 
   const takePicture = async () => {
     if (cameraRef.current) {
@@ -72,21 +114,17 @@ const CameraView = ({
     }
   };
 
-  const retakePicture = () => {
-    setCapturedPhoto(null);
-  };
+  const retakePicture = () => setCapturedPhoto(null);
 
   const confirmPicture = () => {
-    if (capturedPhoto) {
-      onCapture?.(capturedPhoto);
-    }
+    if (capturedPhoto) onCapture?.(capturedPhoto);
   };
 
   const toggleCameraFacing = () => {
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   };
 
-  // Show preview if photo captured
+  // ── Preview after capture ─────────────────────────────────────────────────
   if (capturedPhoto && showPreview) {
     return (
       <View style={[styles.container, style]}>
@@ -117,6 +155,7 @@ const CameraView = ({
     );
   }
 
+  // ── Live Camera ───────────────────────────────────────────────────────────
   return (
     <View style={[styles.container, style]}>
       <ExpoCameraView
@@ -139,24 +178,15 @@ const CameraView = ({
 
         {/* Controls */}
         <View style={styles.controls}>
-          <TouchableOpacity
-            style={styles.controlButton}
-            onPress={onCancel}
-          >
+          <TouchableOpacity style={styles.controlButton} onPress={onCancel}>
             <Ionicons name="close" size={28} color={Colors.textWhite} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.captureButton}
-            onPress={takePicture}
-          >
+          <TouchableOpacity style={styles.captureButton} onPress={takePicture}>
             <View style={styles.captureButtonInner} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.controlButton}
-            onPress={toggleCameraFacing}
-          >
+          <TouchableOpacity style={styles.controlButton} onPress={toggleCameraFacing}>
             <Ionicons name="camera-reverse" size={28} color={Colors.textWhite} />
           </TouchableOpacity>
         </View>
@@ -164,6 +194,8 @@ const CameraView = ({
     </View>
   );
 };
+
+// ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
@@ -188,10 +220,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 24,
-    lineHeight: 20,
+    lineHeight: 22,
+  },
+  settingsHint: {
+    fontWeight: '600',
+    color: Colors.text,
+    fontSize: 13,
   },
   permissionButton: {
-    minWidth: 150,
+    minWidth: 200,
   },
   camera: {
     flex: 1,

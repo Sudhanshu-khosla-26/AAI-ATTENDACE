@@ -30,7 +30,7 @@ export const useLeave = () => {
 // Leave Provider component
 export const LeaveProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
-  
+
   const [leaveBalances, setLeaveBalances] = useState({
     CL: { total: 15, used: 0, remaining: 15 },
     SL: { total: 12, used: 0, remaining: 12 },
@@ -65,59 +65,6 @@ export const LeaveProvider = ({ children }) => {
     }
   }, [isAuthenticated, user]);
 
-  // Apply for leave
-  const applyForLeave = useCallback(async (leaveData) => {
-    if (!isAuthenticated || !user) {
-      return { success: false, error: 'Not authenticated' };
-    }
-    setLoading(true);
-    try {
-      const result = await applyForLeaveService(user.employeeId, leaveData);
-      if (result.success) {
-        await refreshLeaveData();
-      }
-      return result;
-    } catch (error) {
-      console.error('Apply for leave error:', error);
-      return { success: false, error: 'Failed to apply for leave' };
-    } finally {
-      setLoading(false);
-    }
-  }, [isAuthenticated, user, refreshLeaveData]);
-
-  // Get leave applications
-  const getLeaveApplications = useCallback(async (status = null) => {
-    if (!isAuthenticated || !user) return [];
-    try {
-      const applications = await getLeaveApplicationsService(user.employeeId, status);
-      setLeaveApplications(applications);
-      return applications;
-    } catch (error) {
-      console.error('Get leave applications error:', error);
-      return [];
-    }
-  }, [isAuthenticated, user]);
-
-  // Cancel leave application
-  const cancelLeaveApplication = useCallback(async (applicationId) => {
-    if (!isAuthenticated || !user) {
-      return { success: false, error: 'Not authenticated' };
-    }
-    setLoading(true);
-    try {
-      const result = await cancelLeaveApplicationService(applicationId);
-      if (result.success) {
-        await refreshLeaveData();
-      }
-      return result;
-    } catch (error) {
-      console.error('Cancel leave application error:', error);
-      return { success: false, error: 'Failed to cancel application' };
-    } finally {
-      setLoading(false);
-    }
-  }, [isAuthenticated, user, refreshLeaveData]);
-
   // Get leave history
   const getLeaveHistory = useCallback(async (filters = {}) => {
     if (!isAuthenticated || !user) return { pending: [], approved: [], rejected: [], cancelled: [] };
@@ -141,6 +88,19 @@ export const LeaveProvider = ({ children }) => {
     } catch (error) {
       console.error('Get leave stats error:', error);
       return leaveStats;
+    }
+  }, [isAuthenticated, user]);
+
+  // Get leave applications
+  const getLeaveApplications = useCallback(async (status = null) => {
+    if (!isAuthenticated || !user) return [];
+    try {
+      const applications = await getLeaveApplicationsService(user.employeeId, status);
+      setLeaveApplications(applications);
+      return applications;
+    } catch (error) {
+      console.error('Get leave applications error:', error);
+      return [];
     }
   }, [isAuthenticated, user]);
 
@@ -178,6 +138,46 @@ export const LeaveProvider = ({ children }) => {
       setLoading(false);
     }
   }, [isAuthenticated, user, getLeaveBalances, getLeaveApplications, getLeaveHistory, getLeaveStats]);
+
+  // Apply for leave
+  const applyForLeave = useCallback(async (leaveData) => {
+    if (!isAuthenticated || !user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+    setLoading(true);
+    try {
+      const result = await applyForLeaveService(user.employeeId, leaveData);
+      if (result.success) {
+        await refreshLeaveData();
+      }
+      return result;
+    } catch (error) {
+      console.error('Apply for leave error:', error);
+      return { success: false, error: 'Failed to apply for leave' };
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated, user, refreshLeaveData]);
+
+  // Cancel leave application
+  const cancelLeaveApplication = useCallback(async (applicationId) => {
+    if (!isAuthenticated || !user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+    setLoading(true);
+    try {
+      const result = await cancelLeaveApplicationService(applicationId);
+      if (result.success) {
+        await refreshLeaveData();
+      }
+      return result;
+    } catch (error) {
+      console.error('Cancel leave application error:', error);
+      return { success: false, error: 'Failed to cancel application' };
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated, user, refreshLeaveData]);
 
   // Check if user has sufficient leave balance
   const hasSufficientBalance = useCallback((leaveType, days) => {

@@ -9,7 +9,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 import Colors from '../constants/colors';
 import { useAuth } from '../context';
@@ -56,7 +56,7 @@ export default function PhotoVerificationScreen() {
     try {
       const fileName = `profile_${Date.now()}.jpg`;
       const localUri = FileSystem.documentDirectory + fileName;
-      
+
       await FileSystem.copyAsync({
         from: capturedPhoto.uri,
         to: localUri,
@@ -130,7 +130,7 @@ export default function PhotoVerificationScreen() {
   const renderPreviewStep = () => (
     <View style={styles.content}>
       <Text style={styles.previewTitle}>Review Your Photo</Text>
-      
+
       <View style={styles.previewContainer}>
         <Image
           source={{ uri: capturedPhoto?.uri }}
@@ -208,7 +208,7 @@ export default function PhotoVerificationScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar style="dark" backgroundColor={Colors.background} />
-      
+
       {currentStep === STEPS.INTRO && renderIntroStep()}
       {currentStep === STEPS.CAMERA && renderCameraStep()}
       {currentStep === STEPS.PREVIEW && renderPreviewStep()}
