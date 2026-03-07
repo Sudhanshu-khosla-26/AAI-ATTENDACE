@@ -115,13 +115,19 @@ export const uploadFile = async (endpoint, fileUri, fieldName = 'photo', extraFi
 
     const formData = new FormData();
 
+    // Standardize URI for Android (ensure file:// prefix)
+    let internalUri = fileUri;
+    if (require('react-native').Platform.OS === 'android' && !internalUri.startsWith('file://') && !internalUri.startsWith('content://')) {
+        internalUri = 'file://' + internalUri;
+    }
+
     // Determine MIME type from URI
     const ext = fileUri.split('.').pop()?.toLowerCase();
     const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
     const fileName = `${fieldName}_${Date.now()}.${ext || 'jpg'}`;
 
     formData.append(fieldName, {
-        uri: fileUri,
+        uri: internalUri,
         type: mimeType,
         name: fileName,
     });
@@ -133,7 +139,7 @@ export const uploadFile = async (endpoint, fileUri, fieldName = 'photo', extraFi
 
     const url = `${API_BASE_URL}${endpoint}`;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s for uploads
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s for uploads
 
     try {
         const response = await fetch(url, {

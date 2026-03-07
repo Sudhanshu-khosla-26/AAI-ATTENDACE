@@ -17,19 +17,26 @@
 import { Platform } from 'react-native';
 
 const getBaseUrl = () => {
-    if (!__DEV__) return 'https://your-production-domain.com';
+    // Priority 1: Environment Variable (from .env)
+    if (process.env.EXPO_PUBLIC_API_URL) {
+        return process.env.EXPO_PUBLIC_API_URL;
+    }
 
-    // For Expo Web (browser), always connect via localhost to avoid CORS/LAN issues on the same machine
+    // Priority 2: Production fallback
+    if (!__DEV__) return 'https://aai-website-rho.vercel.app';
+
+    // Priority 3: Development fallbacks
+    // For Expo Web (browser)
     if (Platform.OS === 'web') return 'http://localhost:3000';
 
-    // For Native Android/iOS (on same network), use the machine's LAN IP
+    // For Native Android/iOS (on same network)
     // Current Machine IP: 172.20.10.2
     return 'http://172.20.10.2:3000';
 };
 
 export const API_BASE_URL = getBaseUrl();
 
-export const API_TIMEOUT = 15000; // 15 seconds
+export const API_TIMEOUT = 45000; // 45 seconds
 
 export const API_ENDPOINTS = {
     // ─── Auth ────────────────────────────────────────────────────────────────

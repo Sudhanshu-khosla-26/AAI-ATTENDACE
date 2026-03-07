@@ -22,7 +22,8 @@
         "NSLocationWhenInUseUsageDescription": "This app uses your location to verify you are at your workplace when marking attendance.",
         "NSLocationAlwaysUsageDescription": "This app uses your location to verify you are at your workplace when marking attendance.",
         "NSFaceIDUsageDescription": "This app uses Face ID to secure your account and prevent unauthorized access.",
-        "NSPhotoLibraryUsageDescription": "This app needs access to your photos to save attendance verification images."
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photos to save attendance verification images.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "config": {
         "googleMapsApiKey": "AIzaSyDCd_sREio2JmNqZDWKtfhH-70tnCXgV3g"

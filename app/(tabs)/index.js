@@ -93,6 +93,7 @@ export default function HomeScreen() {
       >
         {/* ── Attendance card ── */}
         <AttendanceStatusCard
+          user={user}
           status={attendanceStatus}
           onCheckIn={() => router.push({ pathname: '/mark-attendance', params: { type: 'checkin' } })}
           onCheckOut={() => router.push({ pathname: '/mark-attendance', params: { type: 'checkout' } })}

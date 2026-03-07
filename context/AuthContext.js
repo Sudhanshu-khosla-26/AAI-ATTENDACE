@@ -21,6 +21,9 @@ import {
   authenticateWithBiometrics,
   isBiometricRequired,
 } from '../services/authService';
+import { uploadFile } from '../utils/apiClient';
+import { API_ENDPOINTS } from '../constants/api';
+import { Platform } from 'react-native';
 
 const AuthContext = createContext();
 
@@ -174,10 +177,37 @@ export const AuthProvider = ({ children }) => {
   const verifyPhoto = useCallback(async (photoUri) => {
     if (!user) return { success: false, error: 'Not authenticated' };
     try {
-      setUser(prev => ({ ...prev, isPhotoVerified: true }));
-      return { success: true };
+      // Standardize URI
+      let internalUri = photoUri;
+      if (Platform.OS === 'android' && !internalUri.startsWith('file://')) {
+        internalUri = 'file://' + internalUri;
+      }
+
+      // 1. Upload to Cloudinary via backend
+      console.log(`[AuthContext] Uploading profile photo: ${internalUri.slice(0, 50)}...`);
+      const uploadResult = await uploadFile(API_ENDPOINTS.UPLOAD_PROFILE_PHOTO, internalUri, 'photo');
+
+      if (!uploadResult.success || !uploadResult.url) {
+        return { success: false, error: uploadResult.error || 'Failed to upload photo to server' };
+      }
+
+      const photoUrl = uploadResult.url;
+
+      // 2. Update user profile with the new photo URL
+      const updateResult = await updateProfileService(user.userId, {
+        photoUrl,
+        isPhotoVerified: true
+      });
+
+      if (updateResult.success) {
+        setUser(prev => ({ ...prev, photoUrl, isPhotoVerified: true }));
+        return { success: true, url: photoUrl };
+      }
+
+      return { success: false, error: updateResult.error || 'Failed to update user profile' };
     } catch (error) {
-      return { success: false, error: 'Failed to verify photo' };
+      console.error('[AuthContext] verifyPhoto error:', error);
+      return { success: false, error: 'Failed to verify photo: ' + error.message };
     }
   }, [user]);
 

@@ -55,6 +55,7 @@ export const AttendanceProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
 
+
   const getTodayAttendance = useCallback(async () => {
     if (!isAuthenticated) return null;
     try {
@@ -139,11 +140,11 @@ export const AttendanceProvider = ({ children }) => {
     }
   }, [isAuthenticated, getAttendanceStatus]);
 
-  const getAttendanceHistory = useCallback(async (page = 1, filters = {}) => {
+  const getAttendanceHistory = useCallback(async (page = 1, limit = 20, filters = {}) => {
     if (!isAuthenticated) return [];
     setLoading(true);
     try {
-      const result = await getAttendanceHistoryService(page, 20, filters);
+      const result = await getAttendanceHistoryService(page, limit, filters);
       if (result.success) {
         setAttendanceHistory(result.records || []);
         return result.records || [];
@@ -228,6 +229,17 @@ export const AttendanceProvider = ({ children }) => {
       setLoading(false);
     }
   }, [isAuthenticated, getAttendanceStatus, getAttendanceStats]);
+
+  // Auto-refresh summary data every 10s to keep web/app in sync
+  React.useEffect(() => {
+    if (!isAuthenticated) return;
+    const poll = setInterval(() => {
+      getTodayAttendance();
+      getAttendanceStatus();
+      getAttendanceStats();
+    }, 10000);
+    return () => clearInterval(poll);
+  }, [isAuthenticated, getTodayAttendance, getAttendanceStatus, getAttendanceStats]);
 
   const value = {
     todayAttendance,

@@ -34,16 +34,16 @@ export const STORAGE_KEYS = {
 export const ATTENDANCE_CONFIG = {
   // Geofence radius in meters
   defaultGeofenceRadius: 200,
-  
+
   // Working hours (24-hour format)
   workingHours: {
     start: 6,   // 6 AM
     end: 22,    // 10 PM
   },
-  
+
   // Biometric lock timeout in minutes
   biometricTimeout: 5,
-  
+
   // Auto-logout options in minutes
   autoLogoutOptions: [
     { label: 'Never', value: 0 },
@@ -51,7 +51,7 @@ export const ATTENDANCE_CONFIG = {
     { label: '15 minutes', value: 15 },
     { label: '30 minutes', value: 30 },
   ],
-  
+
   // Default auto-logout
   defaultAutoLogout: 15,
 };
@@ -59,9 +59,9 @@ export const ATTENDANCE_CONFIG = {
 // Leave Configuration
 export const LEAVE_CONFIG = {
   types: [
-    { id: 'CL', name: 'Casual Leave', color: '#3B82F6', icon: 'beach' },
-    { id: 'SL', name: 'Sick Leave', color: '#F59E0B', icon: 'medical-bag' },
-    { id: 'EL', name: 'Earned Leave', color: '#10B981', icon: 'calendar-check' },
+    { id: 'CL', name: 'Casual Leave', color: '#3B82F6', icon: 'umbrella' },
+    { id: 'SL', name: 'Sick Leave', color: '#F59E0B', icon: 'medical' },
+    { id: 'EL', name: 'Earned Leave', color: '#10B981', icon: 'calendar' },
   ],
   defaultBalances: {
     CL: { total: 15, used: 0 },
@@ -95,49 +95,49 @@ export const DESIGNATIONS = [
 
 // Airport Locations with coordinates
 export const AIRPORT_LOCATIONS = [
-  { 
-    id: 'DEL', 
-    name: 'Indira Gandhi International Airport', 
+  {
+    id: 'DEL',
+    name: 'Indira Gandhi International Airport',
     code: 'DEL',
     latitude: 28.5562,
     longitude: 77.1000,
     radius: 500,
   },
-  { 
-    id: 'BOM', 
-    name: 'Chhatrapati Shivaji Maharaj International Airport', 
+  {
+    id: 'BOM',
+    name: 'Chhatrapati Shivaji Maharaj International Airport',
     code: 'BOM',
     latitude: 19.0896,
     longitude: 72.8656,
     radius: 500,
   },
-  { 
-    id: 'MAA', 
-    name: 'Chennai International Airport', 
+  {
+    id: 'MAA',
+    name: 'Chennai International Airport',
     code: 'MAA',
     latitude: 12.9941,
     longitude: 80.1709,
     radius: 400,
   },
-  { 
-    id: 'BLR', 
-    name: 'Kempegowda International Airport', 
+  {
+    id: 'BLR',
+    name: 'Kempegowda International Airport',
     code: 'BLR',
     latitude: 13.1986,
     longitude: 77.7066,
     radius: 500,
   },
-  { 
-    id: 'HYD', 
-    name: 'Rajiv Gandhi International Airport', 
+  {
+    id: 'HYD',
+    name: 'Rajiv Gandhi International Airport',
     code: 'HYD',
     latitude: 17.2403,
     longitude: 78.4294,
     radius: 400,
   },
-  { 
-    id: 'CCU', 
-    name: 'Netaji Subhas Chandra Bose International Airport', 
+  {
+    id: 'CCU',
+    name: 'Netaji Subhas Chandra Bose International Airport',
     code: 'CCU',
     latitude: 22.6547,
     longitude: 88.4467,
@@ -154,10 +154,10 @@ export const SYNC_CONFIG = {
     { label: 'Weekly', value: 'weekly' },
   ],
   defaultFrequency: 'daily',
-  
+
   // Retry attempts for failed sync
   maxRetryAttempts: 3,
-  
+
   // Retry delay in milliseconds
   retryDelay: 5000,
 };

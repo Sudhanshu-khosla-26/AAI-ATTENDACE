@@ -28,10 +28,17 @@ export default function HistoryScreen() {
   const [calendarData, setCalendarData] = useState({});
 
   const loadData = useCallback(async () => {
-    const monthKey = `${selectedMonth.getFullYear()}-${String(selectedMonth.getMonth() + 1).padStart(2, '0')}`;
+    const year = selectedMonth.getFullYear();
+    const month = selectedMonth.getMonth() + 1;
+    const monthStr = String(month).padStart(2, '0');
+    const lastDay = new Date(year, month, 0).getDate(); // last day of month
+
+    const startDate = `${year}-${monthStr}-01`;
+    const endDate = `${year}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
+
     await Promise.all([
-      getAttendanceHistory(monthKey),
-      getAttendanceStats(monthKey),
+      getAttendanceHistory(1, 31, { startDate, endDate }),
+      getAttendanceStats(month, year),
     ]);
   }, [selectedMonth, getAttendanceHistory, getAttendanceStats]);
 
@@ -43,21 +50,27 @@ export default function HistoryScreen() {
   );
 
   useEffect(() => {
-    // Re-process calendar data when history changes
+    const year = selectedMonth.getFullYear();
+    const month = selectedMonth.getMonth() + 1;
+    const monthStr = String(month).padStart(2, '0');
+    const prefix = `${year}-${monthStr}-`;
+
     const data = {};
     attendanceHistory.forEach(record => {
-      const day = parseInt(record.date.split('-')[2]);
-      if (day) {
-        data[day] = {
-          status: record.status,
-          checkIn: record.checkIn?.time,
-          checkOut: record.checkOut?.time,
-          totalHours: record.totalHours,
-        };
+      if (record.date.startsWith(prefix)) {
+        const day = parseInt(record.date.split('-')[2]);
+        if (day) {
+          data[day] = {
+            status: record.status,
+            checkIn: record.checkIn?.time,
+            checkOut: record.checkOut?.time,
+            totalHours: record.totalHours,
+          };
+        }
       }
     });
     setCalendarData(data);
-  }, [attendanceHistory]);
+  }, [attendanceHistory, selectedMonth]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

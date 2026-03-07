@@ -10,7 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '../constants/colors';
 import { formatDate, formatTime } from '../utils/dateUtils';
 
-const AttendanceStatusCard = ({ status, onCheckIn, onCheckOut, loading = false }) => {
+const AttendanceStatusCard = ({ status, onCheckIn, onCheckOut, loading = false, user }) => {
   const {
     hasCheckedIn,
     hasCheckedOut,
@@ -21,7 +21,39 @@ const AttendanceStatusCard = ({ status, onCheckIn, onCheckOut, loading = false }
     checkOutPhoto,
   } = status || {};
 
+  const isSunday = new Date().getDay() === 0;
+  const isSaturday = new Date().getDay() === 6;
+  const isSaturdayWorking = user?.locationId?.isSaturdayWorking || false;
+
   const getConfig = () => {
+    // ── Holiday Logic ───────────────────────────────────────────────────
+    if (isSunday && !hasCheckedIn) return {
+      icon: 'cafe-outline',
+      badge: 'WEEKLY HOLIDAY',
+      badgeColor: '#EF4444',
+      title: 'It\'s Sunday',
+      sub: 'Operations are suspended today.',
+      btnLabel: 'Holiday (Sunday)',
+      btnIcon: 'calendar-outline',
+      btnColors: ['#4B5563', '#374151'],
+      disabled: true,
+      done: true,
+    };
+
+    if (isSaturday && !isSaturdayWorking && !hasCheckedIn) return {
+      icon: 'cafe-outline',
+      badge: 'SATURDAY HOLIDAY',
+      badgeColor: '#F59E0B',
+      title: 'Saturday Holiday',
+      sub: 'Weekend holiday for this office node.',
+      btnLabel: 'Holiday (Saturday)',
+      btnIcon: 'calendar-outline',
+      btnColors: ['#4B5563', '#374151'],
+      disabled: true,
+      done: true,
+    };
+
+    // ── Standard Workday Logic ──────────────────────────────────────────
     if (!hasCheckedIn) return {
       icon: 'time-outline',
       badge: 'NOT CHECKED IN',
@@ -109,8 +141,8 @@ const AttendanceStatusCard = ({ status, onCheckIn, onCheckOut, loading = false }
 
       {/* Action button */}
       <TouchableOpacity
-        onPress={loading ? null : (hasCheckedIn ? onCheckOut : onCheckIn)}
-        disabled={loading}
+        onPress={(loading || cfg.disabled) ? null : (hasCheckedIn ? onCheckOut : onCheckIn)}
+        disabled={loading || cfg.disabled}
         activeOpacity={0.8}
         style={styles.btn}
       >

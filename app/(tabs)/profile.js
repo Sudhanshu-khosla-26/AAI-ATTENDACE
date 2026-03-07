@@ -10,16 +10,30 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 import Colors from '../../constants/colors';
 import { useAuth, useApp } from '../../context';
 import { API_BASE_URL } from '../../constants/api';
 import Header from '../../components/Header';
 import Toast from '../../components/Toast';
+import ProfilePhotoModal from '../../components/ProfilePhotoModal';
 import { formatDate } from '../../utils/dateUtils';
 import { DEPARTMENTS, DESIGNATIONS, AIRPORT_LOCATIONS } from '../../constants/config';
+import { Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 
 const { width } = Dimensions.get('window');
+
+/**
+ * Resolve a photo URL for display.
+ * - Cloudinary/HTTPS URLs: use as-is
+ * - Old local /path URLs: prepend API_BASE_URL
+ */
+const resolvePhotoUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${API_BASE_URL}${url}`; // legacy local path eg. /profile-photos/xxx.jpg
+};
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -27,6 +41,21 @@ export default function ProfileScreen() {
   const { settings, saveSettings } = useApp();
 
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const [editData, setEditData] = useState({
+    fullName: user?.fullName || '',
+    phone: user?.phone || '',
+  });
+
+  const [passwordData, setPasswordData] = useState({
+    oldPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
 
   const handleLogout = () => {
     Alert.alert(
@@ -59,6 +88,31 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleUpdateProfile = async () => {
+    if (!editData.fullName.trim()) {
+      setToast({ visible: true, message: 'Name cannot be empty', type: 'error' });
+      return;
+    }
+
+    if (editData.phone && !/^[6-9]\d{9}$/.test(editData.phone)) {
+      setToast({ visible: true, message: 'Invalid Indian phone number', type: 'error' });
+      return;
+    }
+
+    setIsUpdating(true);
+
+    // Using the actual updateProfile from useAuth
+    const updateResult = await updateProfile(editData);
+
+    setIsUpdating(false);
+    if (updateResult.success) {
+      setIsEditModalVisible(false);
+      setToast({ visible: true, message: 'Profile updated successfully', type: 'success' });
+    } else {
+      setToast({ visible: true, message: updateResult.error || 'Update failed', type: 'error' });
+    }
+  };
+
   const handleToggleNotifications = async (key, value) => {
     const result = await saveSettings({
       notifications: { ...settings.notifications, [key]: value },
@@ -72,9 +126,48 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleChangePassword = async () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setToast({ visible: true, message: 'Passwords do not match', type: 'error' });
+      return;
+    }
+    if (passwordData.newPassword.length < 6) {
+      setToast({ visible: true, message: 'Password must be at least 6 characters', type: 'error' });
+      return;
+    }
+
+    setIsUpdating(true);
+    const { api } = require('../../utils/apiClient');
+    const { API_ENDPOINTS } = require('../../constants/api');
+
+    const result = await api.post(API_ENDPOINTS.CHANGE_PASSWORD || '/api/auth/change-password', {
+      oldPassword: passwordData.oldPassword,
+      newPassword: passwordData.newPassword,
+    });
+
+    setIsUpdating(false);
+    if (result.success) {
+      setIsPasswordModalVisible(false);
+      setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      setToast({ visible: true, message: 'Password changed successfully', type: 'success' });
+    } else {
+      setToast({ visible: true, message: result.error || 'Failed to change password', type: 'error' });
+    }
+  };
+
+  const handlePhotoComplete = async (photoUrl) => {
+    setShowPhotoModal(false);
+    await updateProfile({ photoUrl });
+    setToast({ visible: true, message: 'Profile photo updated!', type: 'success' });
+  };
+
   const getDepartmentName = (id) => DEPARTMENTS.find(d => d.id === id)?.name || id;
   const getDesignationName = (id) => DESIGNATIONS.find(d => d.id === id)?.name || id;
-  const getLocationName = (id) => AIRPORT_LOCATIONS.find(l => l.id === id)?.name || id;
+  const getLocationName = (val) => {
+    if (!val) return 'AAI HQ';
+    if (typeof val === 'object') return val.name || val.code || 'AAI Site';
+    return AIRPORT_LOCATIONS.find(l => l.id === val)?.name || val;
+  };
 
   const renderSettingItem = ({ icon, title, subtitle, onPress, toggle, value, color = Colors.primary }) => (
     <TouchableOpacity
@@ -123,7 +216,7 @@ export default function ProfileScreen() {
                 <View style={styles.avatarInner}>
                   {user?.photoUrl ? (
                     <Image
-                      source={{ uri: `${API_BASE_URL}${user.photoUrl}` }}
+                      source={{ uri: resolvePhotoUrl(user.photoUrl) }}
                       style={styles.avatarImage}
                     />
                   ) : (
@@ -132,7 +225,11 @@ export default function ProfileScreen() {
                     </Text>
                   )}
                 </View>
-                <TouchableOpacity style={styles.editAvatar}>
+                <TouchableOpacity
+                  style={styles.editAvatar}
+                  onPress={() => setShowPhotoModal(true)}
+                  activeOpacity={0.8}
+                >
                   <Ionicons name="camera" size={14} color="#FFF" />
                 </TouchableOpacity>
               </View>
@@ -143,6 +240,16 @@ export default function ProfileScreen() {
                   <Text style={styles.roleText}>{user?.role?.toUpperCase()}</Text>
                 </View>
                 <Text style={styles.employeeId}>Employee ID: {user?.employeeId}</Text>
+                <TouchableOpacity
+                  style={styles.editProfileBtn}
+                  onPress={() => {
+                    setEditData({ fullName: user?.fullName, phone: user?.phone });
+                    setIsEditModalVisible(true);
+                  }}
+                >
+                  <Ionicons name="create-outline" size={12} color="#FFF" />
+                  <Text style={styles.editProfileText}>Edit Profile</Text>
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -157,7 +264,7 @@ export default function ProfileScreen() {
               <View style={styles.statSep} />
               <View style={styles.statItem}>
                 <Text style={styles.statLabel}>OFFICE</Text>
-                <Text style={styles.statValue}>{getLocationName(user?.location)}</Text>
+                <Text style={styles.statValue}>{getLocationName(user?.location || user?.locationId)}</Text>
               </View>
             </View>
           </LinearGradient>
@@ -227,6 +334,13 @@ export default function ProfileScreen() {
             color: '#F59E0B'
           })}
           {renderSettingItem({
+            icon: 'lock-closed-outline',
+            title: 'Change Password',
+            subtitle: 'Update your security credentials',
+            onPress: () => setIsPasswordModalVisible(true),
+            color: '#6366F1'
+          })}
+          {renderSettingItem({
             icon: 'log-out-outline',
             title: 'Sign Out',
             subtitle: 'Disconnect from AAI Portal',
@@ -249,6 +363,117 @@ export default function ProfileScreen() {
         type={toast.type}
         onHide={() => setToast({ ...toast, visible: false })}
       />
+
+      {/* Profile Photo Re-upload Modal */}
+      <ProfilePhotoModal
+        visible={showPhotoModal}
+        onComplete={handlePhotoComplete}
+        onSkip={() => setShowPhotoModal(false)}
+      />
+
+      {/* Edit Profile Modal */}
+      <Modal visible={isEditModalVisible} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalContent}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Profile</Text>
+              <TouchableOpacity onPress={() => setIsEditModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.inputLabel}>Full Name</Text>
+              <TextInput
+                style={styles.input}
+                value={editData.fullName}
+                onChangeText={(val) => setEditData({ ...editData, fullName: val })}
+                placeholder="Enter full name"
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.inputLabel}>Phone Number</Text>
+              <TextInput
+                style={styles.input}
+                value={editData.phone}
+                onChangeText={(val) => setEditData({ ...editData, phone: val })}
+                placeholder="Enter phone number"
+                keyboardType="phone-pad"
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.saveBtn, isUpdating && styles.disabledBtn]}
+              onPress={handleUpdateProfile}
+              disabled={isUpdating}
+            >
+              {isUpdating ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
+            </TouchableOpacity>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Change Password Modal */}
+      <Modal visible={isPasswordModalVisible} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalContent}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Change Password</Text>
+              <TouchableOpacity onPress={() => setIsPasswordModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.inputLabel}>Old Password</Text>
+              <TextInput
+                style={styles.input}
+                value={passwordData.oldPassword}
+                onChangeText={(val) => setPasswordData({ ...passwordData, oldPassword: val })}
+                secureTextEntry
+                placeholder="Required to verify identity"
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.inputLabel}>New Password</Text>
+              <TextInput
+                style={styles.input}
+                value={passwordData.newPassword}
+                onChangeText={(val) => setPasswordData({ ...passwordData, newPassword: val })}
+                secureTextEntry
+                placeholder="Min. 6 characters"
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.inputLabel}>Confirm New Password</Text>
+              <TextInput
+                style={styles.input}
+                value={passwordData.confirmPassword}
+                onChangeText={(val) => setPasswordData({ ...passwordData, confirmPassword: val })}
+                secureTextEntry
+                placeholder="Must match new password"
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.saveBtn, isUpdating && styles.disabledBtn]}
+              onPress={handleChangePassword}
+              disabled={isUpdating}
+            >
+              {isUpdating ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Update Password</Text>}
+            </TouchableOpacity>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -352,6 +577,22 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
     marginTop: 6,
     fontWeight: '600',
+  },
+  editProfileBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    gap: 4,
+  },
+  editProfileText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFF',
   },
   headerStats: {
     flexDirection: 'row',
@@ -558,5 +799,75 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#94A3B8',
     textAlign: 'center',
+  },
+  // Modals
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  input: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: '#0F172A',
+    fontWeight: '600',
+  },
+  saveBtn: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginTop: 12,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  saveBtnText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  disabledBtn: {
+    opacity: 0.6,
   },
 });

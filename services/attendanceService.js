@@ -6,6 +6,7 @@
 import { API_ENDPOINTS } from '../constants/api';
 import { api, uploadFile } from '../utils/apiClient';
 import { getData } from '../utils/storageUtils';
+import { Platform } from 'react-native';
 import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
 
@@ -112,8 +113,20 @@ export const checkUserGeofence = async (userLocation, locationId) => {
  * Save photo to local attendance_photos folder
  */
 const savePhotoLocally = async (photoUri, type) => {
-  if (!photoUri) return null; // No photo to save
+  if (!photoUri) return null;
   try {
+    // Standardize URI for Android (ensure file:// prefix)
+    let internalUri = photoUri;
+    if (Platform.OS === 'android' && !internalUri.startsWith('file://')) {
+      internalUri = 'file://' + internalUri;
+    }
+
+    const { exists } = await FileSystem.getInfoAsync(internalUri);
+    if (!exists) {
+      console.warn(`[attendanceService] Source photo does not exist at: ${internalUri}`);
+      return photoUri; // fallback
+    }
+
     const photosDir = FileSystem.documentDirectory + 'attendance_photos/';
     const dirInfo = await FileSystem.getInfoAsync(photosDir);
     if (!dirInfo.exists) {
@@ -122,7 +135,7 @@ const savePhotoLocally = async (photoUri, type) => {
 
     const fileName = `${type}_${Date.now()}.jpg`;
     const localUri = photosDir + fileName;
-    await FileSystem.copyAsync({ from: photoUri, to: localUri });
+    await FileSystem.copyAsync({ from: internalUri, to: localUri });
     return localUri;
   } catch (error) {
     console.error('[attendanceService] savePhotoLocally:', error);
@@ -134,9 +147,26 @@ const savePhotoLocally = async (photoUri, type) => {
  * Upload photo to backend and get URL
  */
 const uploadAttendancePhoto = async (photoUri, type) => {
+  if (!photoUri) return null;
   try {
-    const result = await uploadFile('/api/upload/attendance-photo', photoUri, 'photo', { type });
-    if (result.success && result.url) return result.url;
+    // Standardize URI for Android
+    let internalUri = photoUri;
+    if (Platform.OS === 'android' && !internalUri.startsWith('file://')) {
+      internalUri = 'file://' + internalUri;
+    }
+
+    // Verify file exists before upload attempt
+    const { exists } = await FileSystem.getInfoAsync(internalUri);
+    if (!exists) {
+      console.error(`[attendanceService] Upload failed — file not found: ${internalUri}`);
+      return null;
+    }
+
+    const result = await uploadFile('/api/upload/attendance-photo', internalUri, 'photo', { type });
+    if (result.success && result.url) {
+      console.log(`[attendanceService] Upload success: ${result.url}`);
+      return result.url;
+    }
     return null;
   } catch (error) {
     console.error('[attendanceService] uploadAttendancePhoto:', error);
@@ -155,7 +185,9 @@ export const markCheckIn = async (location, photoUri, locationId) => {
     // Try to upload to backend (only if a photo was taken)
     let photoUrl = null;
     if (photoUri) {
+      console.log(`[attendanceService] Uploading photo: ${photoUri.slice(0, 50)}...`);
       photoUrl = await uploadAttendancePhoto(photoUri, 'checkin');
+      console.log(`[attendanceService] Upload result photoUrl: ${photoUrl || 'FAILED'}`);
       // If upload fails, we still proceed with check-in (photo is optional for attendance)
     }
 
@@ -165,8 +197,8 @@ export const markCheckIn = async (location, photoUri, locationId) => {
         lng: location?.longitude,
         accuracy: location?.accuracy,
       },
-      photoUrl: photoUrl || localPhotoUri || null,
-      localPhotoUri: localPhotoUri || null,
+      photoUrl: photoUrl || null, // Only send valid uploaded URL or null
+      localPhotoUri: localPhotoUri || null, // local use only
       locationId,
     });
 
@@ -193,7 +225,9 @@ export const markCheckOut = async (location, photoUri, locationId) => {
     // Try to upload to backend (only if a photo was taken)
     let photoUrl = null;
     if (photoUri) {
+      console.log(`[attendanceService] Uploading checkout photo: ${photoUri.slice(0, 50)}...`);
       photoUrl = await uploadAttendancePhoto(photoUri, 'checkout');
+      console.log(`[attendanceService] Upload result photoUrl: ${photoUrl || 'FAILED'}`);
       // If upload fails, we still proceed with check-out (photo is optional)
     }
     console.log(`[attendanceService] MarkCheckOut: photoUri exists: ${!!photoUri}, photoUrl from server: ${!!photoUrl}, localPhotoUri: ${!!localPhotoUri}`);
@@ -204,8 +238,8 @@ export const markCheckOut = async (location, photoUri, locationId) => {
         lng: location?.longitude,
         accuracy: location?.accuracy,
       },
-      photoUrl: photoUrl || localPhotoUri || null,
-      localPhotoUri: localPhotoUri || null,
+      photoUrl: photoUrl || null, // Only send valid uploaded URL or null
+      localPhotoUri: localPhotoUri || null, // local use only
       locationId,
     });
 

@@ -235,13 +235,15 @@ export const resetPassword = async (email, otp, newPassword) => {
 };
 
 /**
- * Update user profile via API
+ * Update user profile via API (self-update via /api/auth/me)
  */
 export const updateProfile = async (userId, updates) => {
   try {
-    const result = await api.patch(`/api/users/${userId}`, updates);
+    // Use /api/auth/me (PATCH) — employee can update own profile
+    // Do NOT call /api/users/:id which is admin-only
+    const result = await api.patch(API_ENDPOINTS.ME, updates);
     if (result.success) {
-      // Update local session
+      // Update local session cache too
       const session = await getData(STORAGE_KEYS.USER_SESSION, null);
       if (session) {
         const updatedSession = { ...session, ...updates };

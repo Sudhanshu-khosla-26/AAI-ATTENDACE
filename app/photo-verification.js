@@ -13,6 +13,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import Colors from '../constants/colors';
 import { useAuth } from '../context';
+import { Platform } from 'react-native';
 import CameraView from '../components/CameraView';
 import Button from '../components/Button';
 import Card from '../components/Card';
@@ -37,7 +38,15 @@ export default function PhotoVerificationScreen() {
   const [toast, setToast] = useState({ visible: false, message: '', type: 'error' });
 
   const handleCapture = (photo) => {
-    setCapturedPhoto(photo);
+    if (!photo?.uri) return;
+
+    // Ensure file:// prefix for Android to avoid "no such file" errors
+    let standardizedUri = photo.uri;
+    if (Platform.OS === 'android' && !standardizedUri.startsWith('file://')) {
+      standardizedUri = 'file://' + standardizedUri;
+    }
+
+    setCapturedPhoto({ ...photo, uri: standardizedUri });
     setCurrentStep(STEPS.PREVIEW);
   };
 
@@ -62,7 +71,7 @@ export default function PhotoVerificationScreen() {
         to: localUri,
       });
 
-      // Verify photo
+      // Verification now uploads to Cloudinary via updateProfileService in AuthContext
       const result = await verifyPhoto(localUri);
 
       if (result.success) {
