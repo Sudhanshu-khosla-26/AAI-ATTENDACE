@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     minHeight: 48,
   },
-  inputContainerFocused: { borderColor: Colors.primary, elevation: 2 },
+  inputContainerFocused: { borderColor: Colors.primary },
   inputContainerError: { borderColor: Colors.error },
   inputContainerDisabled: { backgroundColor: '#F5F5F5' },
   input: { flex: 1, fontSize: 16, color: '#333', paddingVertical: 12 },

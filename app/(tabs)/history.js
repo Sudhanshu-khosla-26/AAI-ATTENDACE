@@ -163,10 +163,10 @@ export default function HistoryScreen() {
             message="No attendance logs for this month"
           />
         ) : (
-          [...attendanceHistory].reverse().map((record) => {
+          [...attendanceHistory].reverse().map((record, index) => {
             const config = getStatusConfig(record.status);
             return (
-              <View key={record.id} style={styles.recordCard}>
+              <View key={record._id || record.id || index} style={styles.recordCard}>
                 <View style={[styles.statusVerticalBar, { backgroundColor: config.color }]} />
                 <View style={styles.recordBody}>
                   <View style={styles.recordMain}>

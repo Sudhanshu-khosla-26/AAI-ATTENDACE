@@ -5,7 +5,15 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import NetInfo from '@react-native-community/netinfo';
-import * as Notifications from 'expo-notifications';
+// import * as Notifications from 'expo-notifications';
+// Mock Notifications for Expo Go SDK 53 compatibility
+const Notifications = {
+  setNotificationHandler: () => {},
+  scheduleNotificationAsync: async () => 'mock-id',
+  cancelScheduledNotificationAsync: async () => {},
+  getPermissionsAsync: async () => ({ status: 'granted' }),
+  requestPermissionsAsync: async () => ({ status: 'granted' }),
+};
 import { STORAGE_KEYS, SYNC_CONFIG } from '../constants/config';
 import { storeData, getData } from '../utils/storageUtils';
 

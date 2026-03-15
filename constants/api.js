@@ -17,21 +17,20 @@
 import { Platform } from 'react-native';
 
 const getBaseUrl = () => {
-    // Priority 1: Environment Variable (from .env)
+    let url = '';
     if (process.env.EXPO_PUBLIC_API_URL) {
-        return process.env.EXPO_PUBLIC_API_URL;
+        url = process.env.EXPO_PUBLIC_API_URL;
+    } else if (!__DEV__) {
+        url = 'https://aai-website-rho.vercel.app';
+    } else if (Platform.OS === 'web') {
+        url = 'http://localhost:3000';
+    } else {
+        // Fallback for native local dev
+        url = 'http://172.20.10.2:3000';
     }
 
-    // Priority 2: Production fallback
-    if (!__DEV__) return 'https://aai-website-rho.vercel.app';
-
-    // Priority 3: Development fallbacks
-    // For Expo Web (browser)
-    if (Platform.OS === 'web') return 'http://localhost:3000';
-
-    // For Native Android/iOS (on same network)
-    // Current Machine IP: 172.20.10.2
-    return 'http://172.20.10.2:3000';
+    // Ensure NO trailing slash
+    return url.replace(/\/+$/, '');
 };
 
 export const API_BASE_URL = getBaseUrl();

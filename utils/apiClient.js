@@ -40,7 +40,9 @@ const request = async (method, endpoint, body = null, extraHeaders = {}) => {
         headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const url = `${API_BASE_URL}${endpoint}`;
+    const baseUrl = API_BASE_URL.replace(/\/+$/, '');
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = `${baseUrl}${cleanEndpoint}`;
 
     // Timeout using AbortController
     const controller = new AbortController();
@@ -137,7 +139,9 @@ export const uploadFile = async (endpoint, fileUri, fieldName = 'photo', extraFi
         formData.append(key, String(value));
     });
 
-    const url = `${API_BASE_URL}${endpoint}`;
+    const baseUrl = API_BASE_URL.replace(/\/+$/, '');
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = `${baseUrl}${cleanEndpoint}`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s for uploads
 
