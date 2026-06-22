@@ -70,6 +70,12 @@ In the Expo CLI terminal that opens:
 - Press `i` for iOS
 - Scan the QR code with Expo Go to run on a physical device
 
+### Configure Google Maps API key
+
+1. Create or use an existing Google Cloud project.
+2. Enable Maps SDK for Android and Maps SDK for iOS.
+3. Open `app.json` and replace `YOUR_GOOGLE_MAPS_API_KEY` in both Android and iOS sections.
+
 ## Project structure
 
 ```text
@@ -96,7 +102,6 @@ npm run test
 
 - Keep production credentials and API keys out of source control.
 - Configure environment-specific values before production builds.
-- In `app.json`, replace `YOUR_GOOGLE_MAPS_API_KEY` in both Android and iOS configuration sections.
 - Review location/camera permission flows for your deployment policies.
 
 ## Roadmap ideas
