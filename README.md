@@ -53,7 +53,7 @@ A modern, secure, and user-friendly attendance platform built for Airport Author
 
 ```bash
 git clone <repository-url>
-cd AAI-ATTENDACE
+cd aai-attendance-app
 npm install
 ```
 
