@@ -32,8 +32,8 @@ A modern, secure, and user-friendly attendance platform built for Airport Author
 
 ## Technology stack
 
-- **Framework:** React Native with Expo
-- **Routing:** Expo Router
+- **Framework:** React Native with Expo SDK 54
+- **Routing:** Expo Router v6
 - **UI:** React Native Paper
 - **State:** React Context API
 - **Storage:** AsyncStorage
@@ -53,7 +53,7 @@ A modern, secure, and user-friendly attendance platform built for Airport Author
 
 ```bash
 git clone <repository-url>
-cd <project-folder>
+cd AAI-ATTENDACE
 npm install
 ```
 
