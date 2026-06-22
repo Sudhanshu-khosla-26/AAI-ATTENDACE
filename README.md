@@ -47,6 +47,7 @@ A modern, secure, and user-friendly attendance platform built for Airport Author
 ### Prerequisites
 - Node.js 18+
 - npm
+- Expo CLI via `npx` (global install not required)
 - Android Studio (for Android emulator) and/or Xcode (for iOS simulator)
 
 ### Installation
@@ -95,7 +96,7 @@ npm run test
 
 - Keep production credentials and API keys out of source control.
 - Configure environment-specific values before production builds.
-- Add your Google Maps API key in `app.json` for Android/iOS map features.
+- In `app.json`, replace `YOUR_GOOGLE_MAPS_API_KEY` in both Android and iOS configuration sections.
 - Review location/camera permission flows for your deployment policies.
 
 ## Roadmap ideas
