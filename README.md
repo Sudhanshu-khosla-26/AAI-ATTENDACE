@@ -53,7 +53,7 @@ A modern, secure, and user-friendly attendance platform built for Airport Author
 
 ```bash
 git clone <repository-url>
-cd AAI-ATTENDACE
+cd <project-folder>
 npm install
 ```
 
@@ -66,7 +66,6 @@ npm run start
 Then:
 - Press `a` for Android
 - Press `i` for iOS
-- Press `w` for web
 
 ## Project structure
 
