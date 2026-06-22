@@ -64,8 +64,10 @@ npm run start
 ```
 
 Then:
+In the Expo CLI terminal that opens:
 - Press `a` for Android
 - Press `i` for iOS
+- Scan the QR code with Expo Go to run on a physical device
 
 ## Project structure
 
@@ -93,6 +95,7 @@ npm run test
 
 - Keep production credentials and API keys out of source control.
 - Configure environment-specific values before production builds.
+- Add your Google Maps API key in `app.json` for Android/iOS map features.
 - Review location/camera permission flows for your deployment policies.
 
 ## Roadmap ideas
